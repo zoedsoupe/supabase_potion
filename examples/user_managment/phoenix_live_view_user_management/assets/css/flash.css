@@ -1,0 +1,117 @@
+/* Flash Container Base Styles */
+.flash-container {
+    position: fixed;
+    top: 0.5rem; /* Equivalent to top-2 */
+    right: 0.5rem; /* Equivalent to right-2 */
+    margin-right: 0.5rem; /* Equivalent to mr-2 */
+    width: 20rem; /* Equivalent to w-80 */
+    z-index: 50; /* Equivalent to z-50 */
+    border-radius: 0.5rem; /* Equivalent to rounded-lg */
+    padding: 0.75rem; /* Equivalent to p-3 */
+    border: 1px solid; /* Equivalent to ring-1 */
+    display: flex;
+    flex-direction: column;
+    background-color: var(--flash-background);
+    color: var(--flash-text);
+    border-color: var(--flash-border);
+    fill: var(--flash-fill);
+}
+
+/* Responsive Width for Larger Screens */
+@media (min-width: 640px) {
+    /* sm:w-96 */
+    .flash-container {
+        width: 24rem; /* Equivalent to sm:w-96 */
+    }
+}
+
+/* Flash Variants */
+
+/* Info Flash Styles */
+.flash-info {
+    --flash-background: #f0fff4; /* bg-emerald-50 */
+    --flash-text: #065f46; /* text-emerald-800 */
+    --flash-border: #10b981; /* ring-emerald-500 */
+    --flash-fill: #06b6d4; /* fill-cyan-900 */
+}
+
+/* Error Flash Styles */
+.flash-error {
+    --flash-background: #fff1f2; /* bg-rose-50 */
+    --flash-text: #991b1b; /* text-rose-900 */
+    --flash-border: #f43f5e; /* ring-rose-500 */
+    --flash-fill: #991b1b; /* fill-rose-900 */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* shadow-md */
+}
+
+/* Flash Title Styles */
+.flash-title {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem; /* Equivalent to gap-1.5 */
+    font-size: 0.875rem; /* Equivalent to text-sm */
+    font-weight: 600; /* Equivalent to font-semibold */
+    line-height: 1.5rem; /* Equivalent to leading-6 */
+}
+
+/* Icon Styles */
+.icon-small {
+    height: 1rem; /* Equivalent to h-4 */
+    width: 1rem; /* Equivalent to w-4 */
+}
+
+.icon-medium {
+    height: 1.25rem; /* Equivalent to h-5 */
+    width: 1.25rem; /* Equivalent to w-5 */
+}
+
+/* Flash Message Text Styles */
+.flash-message {
+    margin-top: 0.5rem; /* Equivalent to mt-2 */
+    font-size: 0.875rem; /* Equivalent to text-sm */
+    line-height: 1.25rem; /* Equivalent to leading-5 */
+}
+
+/* Close Button Styles */
+.flash-close-button {
+    position: absolute;
+    top: 0.25rem; /* Equivalent to top-1 */
+    right: 0.25rem; /* Equivalent to right-1 */
+    padding: 0.5rem; /* Equivalent to p-2 */
+    background: none;
+    border: none;
+    cursor: pointer;
+    opacity: 0.4; /* Equivalent to opacity-40 */
+    transition: opacity 0.2s ease-in-out;
+}
+
+.flash-close-button:hover {
+    opacity: 0.7; /* Equivalent to group-hover:opacity-70 */
+}
+
+/* Flash Group Container */
+.flash-group-container {
+    /* Add any specific styles for the flash group container if needed */
+}
+
+/* Animated Spin for Icons */
+.icon-animated-spin {
+    /* Apply spin only if user has not requested reduced motion */
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .icon-animated-spin {
+        animation: spin 1s linear infinite; /* Equivalent to animate-spin */
+    }
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Hidden Utility Class */
+.hidden {
+    display: none;
+}

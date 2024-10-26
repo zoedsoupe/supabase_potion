@@ -1,5 +1,5 @@
 defmodule Supabase.Client.Behaviour do
-  @doc """
+  @moduledoc """
   The behaviour for the Supabase Client. This behaviour is used to define the API for a Supabase Client.
 
   If you're implementing a [Self Managed Client](https://github.com/zoedsoupe/supabase-ex?tab=readme-ov-file#self-managed-clients) as the [Supabase.Client](https://hexdocs.pm/supabase_potion/Supabase.Client.html), this behaviour is already implemented for you.
