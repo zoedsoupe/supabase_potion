@@ -31,7 +31,7 @@
           mkShell {
             name = "supabase-ex";
             packages = with pkgs;
-              [beam.elixir_1_17]
+              [beam.elixir_1_17 postgresql]
               ++ lib.optional stdenv.isLinux [inotify-tools]
               ++ lib.optional stdenv.isDarwin [
                 darwin.apple_sdk.frameworks.CoreServices

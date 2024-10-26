@@ -34,4 +34,11 @@ defmodule Arcane.Profiles.Profile do
     |> unique_constraint(:username)
     |> foreign_key_constraint(:id)
   end
+
+  def update_changeset(%{} = params) do
+    %__MODULE__{}
+    |> cast(params, [:username, :website, :avatar_url])
+    |> validate_length(:username, min: 3)
+    |> validate_length(:website, max: 255)
+  end
 end
