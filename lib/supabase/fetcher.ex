@@ -286,8 +286,8 @@ defmodule Supabase.Fetcher do
   end
 
   def apply_client_headers(%Supabase.Client{} = client, token \\ nil, headers \\ []) do
-    client.conn.api_key
-    |> apply_headers(token || client.conn.access_token, client.global.headers)
+    client.api_key
+    |> apply_headers(token || client.access_token, client.global.headers)
     |> merge_headers(headers)
   end
 
