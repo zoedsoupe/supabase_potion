@@ -3,7 +3,7 @@
 Where the magic starts!
 
 > [!WARNING]
-> This project is still in high development, expect breaking changes.
+> This project is still in high development, expect breaking changes and unexpected behaviour.
 
 ## Getting Started
 
@@ -13,14 +13,22 @@ This repository contains a few examples with sample apps to help you get started
 
 #### Gotrue/Auth examples
 
+TODO
+
+<!--
 - [Plug based auth](https://github.com/zoedsoupe/supabase-ex/tree/main/examples/auth/plug)
 - [Phoenix LiveView based auth](https://github.com/zoedsoupe/supabase-ex/tree/main/examples/auth/phoenix_live_view)
 - [User management](https://github.com/zoedsoupe/supabase-ex/tree/main/examples/auth/user_management)
+-->
 
 #### Storage examples
 
+TODO
+
+<!--
 - [Plug based upload](https://github.com/zoedsoupe/supabase-ex/tree/main/examples/storage/plug)
 - [Phoenix LiveView upload](https://github.com/zoedsoupe/supabase-ex/tree/main/examples/storage/phoenix_live_view)
+-->
 
 ### Installation
 
@@ -51,6 +59,7 @@ def deps do
     {:supabase_potion, "~> 0.5"}, # base SDK
     {:supabase_storage, "~> 0.3"}, # storage integration
     {:supabase_gotrue, "~> 0.3"}, # auth integration
+    {:supabase_postgrest, "~> 0.2"}, # postgrest integration
   ]
 end
 ```
@@ -184,7 +193,7 @@ iex> Supabase.GoTrue.sign_in_with_password(client, email: "", password: "")
 ```
 
 For more examples on how to use the client, check clients implementations docs:
-- [Supabase.GoTrue](https://hexdocs.pm/supabase_go_true)
+- [Supabase.GoTrue](https://hexdocs.pm/supabase_gotrue)
 - [Supabase.Storage](https://hexdocs.pm/supabase_storage)
 - [Supabase.PostgREST](https://hexdocs.pm/supabase_postgrest)
 
