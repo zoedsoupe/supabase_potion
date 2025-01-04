@@ -238,15 +238,18 @@ defmodule Supabase.Fetcher do
   """
   @impl true
   def upload(method, url, file, headers \\ []) do
-    body_stream = File.stream!(file, 4096, encoding: :utf8)
+    mime_type = MIME.from_path(file)
+    body_stream = File.stream!(file, 2048, [:raw])
     %File.Stat{size: content_length} = File.stat!(file)
-    content_headers = [{"content-length", to_string(content_length)}]
+    content_headers = [{"content-length", to_string(content_length)}, {"content-type", mime_type}]
     headers = merge_headers(headers, content_headers)
     conn = new_connection(method, url, {:stream, body_stream}, headers)
 
     conn
     |> Finch.request(Supabase.Finch)
     |> format_response()
+  rescue
+    e in File.Error -> {:error, e.reason}
   end
 
   def get_full_url(base_url, path) do

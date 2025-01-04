@@ -57,7 +57,7 @@ enabled = false
 # max_header_length = 4096
 
 [studio]
-enabled = false
+enabled = true
 # Port to use for Supabase Studio.
 port = 54323
 # External URL of the API server that frontend connects to.

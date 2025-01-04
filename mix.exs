@@ -13,9 +13,13 @@ defmodule Supabase.MixProject do
       deps: deps(),
       docs: docs(),
       package: package(),
-      description: description()
+      description: description(),
+      elixirc_paths: elixirc_paths(Mix.env())
     ]
   end
+
+  defp elixirc_paths(e) when e in [:dev, :test], do: ["lib", "priv", "test/support"]
+  defp elixirc_paths(_), do: ["lib"]
 
   def application do
     [
@@ -26,6 +30,7 @@ defmodule Supabase.MixProject do
 
   defp deps do
     [
+      {:mime, "~> 2.0"},
       {:finch, "~> 0.16"},
       {:jason, "~> 1.4"},
       {:ecto, "~> 3.10"},
