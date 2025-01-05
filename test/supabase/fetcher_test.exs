@@ -105,16 +105,16 @@ defmodule Supabase.FetcherTest do
     test "appends query parameters", %{client: client} do
       fetcher = Fetcher.new(client) |> Fetcher.with_query(%{"key" => "value"})
 
-      assert fetcher.query == "key=value"
+      assert fetcher.query == [{"key", "value"}]
     end
 
-    test "overwrites existing query parameters", %{client: client} do
+    test "do not overwrites existing query parameters", %{client: client} do
       fetcher =
         Fetcher.new(client)
         |> Fetcher.with_query(%{"key1" => "value1"})
         |> Fetcher.with_query(%{"key2" => "value2"})
 
-      assert fetcher.query == "key2=value2"
+      assert have_headers?(fetcher.query, ["key1", "key2"])
     end
   end
 
@@ -161,7 +161,7 @@ defmodule Supabase.FetcherTest do
       assert fetcher.method == :post
       assert have_header?(fetcher.headers, "authorization")
       assert get_header(fetcher.headers, "authorization") =~ "token"
-      assert fetcher.query == "key=value"
+      assert fetcher.query == [{"key", "value"}]
     end
   end
 

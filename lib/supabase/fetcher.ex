@@ -108,6 +108,7 @@ defmodule Supabase.Fetcher do
           url: Finch.Request.url(),
           options: Finch.request_opts(),
           service: Supabase.service(),
+          query: map,
           body_decoder: module,
           error_parser: module
         }
@@ -118,7 +119,7 @@ defmodule Supabase.Fetcher do
     :client,
     :body,
     method: :get,
-    query: "",
+    query: %{},
     options: [],
     headers: %{},
     body_decoder: Supabase.Fetcher.JSONDecoder,
@@ -193,12 +194,16 @@ defmodule Supabase.Fetcher do
 
   @doc """
   Append query params to the current request builder, it receives an `Enumerable.t()`
-  and encodes it to string with `URI.encode_query/1`. Note that this function
-  overwrite the `query` attribute each time is called.
+  and accumulates it into the current request. This function behaves the same as
+  `with_headers/2`, so it is **rigt-associative**, meaning that duplicate keys
+  informed will overwrite the last value.
+
+  Finally, before the request is sent, the query will be encoded with `URI.encode_query/1`
   """
   @impl true
-  def with_query(%__MODULE__{} = builder, query) do
-    %{builder | query: URI.encode_query(query)}
+  def with_query(%__MODULE__{} = builder, query)
+      when is_map(query) or is_list(query) do
+    %{builder | query: merge_headers(builder.query, query)}
   end
 
   @doc """
@@ -241,7 +246,8 @@ defmodule Supabase.Fetcher do
   """
   @impl true
   def request(%__MODULE__{method: method, headers: headers} = b) do
-    url = URI.append_query(b.url, b.query)
+    query = URI.encode_query(b.query)
+    url = URI.append_query(b.url, query)
 
     method
     |> Finch.build(url, headers, b.body)
@@ -255,7 +261,8 @@ defmodule Supabase.Fetcher do
   """
   @impl true
   def request_async(%__MODULE__{method: method, headers: headers} = b) do
-    url = URI.append_query(b.url, b.query)
+    query = URI.encode_query(b.query)
+    url = URI.append_query(b.url, query)
 
     ref =
       method
@@ -314,7 +321,8 @@ defmodule Supabase.Fetcher do
   """
   @impl true
   def stream(%__MODULE__{method: method, headers: headers} = b, on_response \\ nil) do
-    url = URI.append_query(b.url, b.query)
+    query = URI.encode_query(b.query)
+    url = URI.append_query(b.url, query)
     req = Finch.build(method, url, headers, b.body)
     ref = make_ref()
     task = spawn_stream_task(req, ref, b.options)
