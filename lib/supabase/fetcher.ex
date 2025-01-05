@@ -108,7 +108,7 @@ defmodule Supabase.Fetcher do
           url: Finch.Request.url(),
           options: Finch.request_opts(),
           service: Supabase.service(),
-          query: map,
+          query: list({String.t(), String.t()}),
           body_decoder: module,
           error_parser: module
         }
@@ -119,9 +119,9 @@ defmodule Supabase.Fetcher do
     :client,
     :body,
     method: :get,
-    query: %{},
+    query: [],
     options: [],
-    headers: %{},
+    headers: [],
     body_decoder: Supabase.Fetcher.JSONDecoder,
     error_parser: Supabase.ErrorParser
   ]
@@ -503,6 +503,68 @@ defmodule Supabase.Fetcher do
 
   def get_header(%Finch.Response{} = resp, header, default) do
     get_header(resp, header) || default
+  end
+
+  @doc """
+  Tries to find and return the value for a query param, given it name, if it doesn't
+  existis, it returns the default value informed or `nil`.
+  """
+  @spec get_query_param(t, param :: String.t(), default :: String.t() | nil) :: String.t() | nil
+  def get_query_param(%__MODULE__{} = builder, key, default \\ nil)
+      when is_binary(key) and (is_binary(default) or is_nil(default)) do
+    case List.keyfind(builder.query, key, 0) do
+      nil -> default
+      {^key, value} -> value
+    end
+  end
+
+  @doc """
+  Tries to find and return the value for a request headers, given it name, if it doesn't
+  existis, it returns the default value informed or `nil`.
+
+  Do not confuse with `get_header/2`.
+  """
+  @spec get_req_header(t, name :: String.t(), default :: String.t() | nil) :: String.t() | nil
+  def get_req_header(%__MODULE__{} = builder, key, default \\ nil)
+      when is_binary(key) and (is_binary(default) or is_nil(default)) do
+    case List.keyfind(builder.headers, key, 0) do
+      nil -> default
+      {^key, value} -> value
+    end
+  end
+
+  @doc """
+  Merges an existing query param value with a new one, prepending the new value
+  with the existing one. If no current value exists for the param, this function
+  will behave the same as `with_query/2`.
+  """
+  @spec merge_query_param(t, param :: String.t(), value :: String.t(),
+          with: joinner :: String.t()
+        ) :: t
+  def merge_query_param(%__MODULE__{} = builder, key, value, [with: w] \\ [with: ","])
+      when is_binary(key) and is_binary(value) and is_binary(w) do
+    if curr = get_query_param(builder, key) do
+      with_query(builder, %{key => Enum.join([curr, value], w)})
+    else
+      with_query(builder, %{key => value})
+    end
+  end
+
+  @doc """
+  Merges an existing request header value with a new one, prepending the new value
+  with the existing one. If no current value exists for the header, this function
+  will behave the same as `with_headers/2`.
+  """
+  @spec merge_req_header(t, header :: String.t(), value :: String.t(),
+          with: joinner :: String.t()
+        ) :: t
+  def merge_req_header(%__MODULE__{} = builder, key, value, [with: w] \\ [with: ","])
+      when is_binary(key) and is_binary(value) and is_binary(w) do
+    if curr = get_req_header(builder, key) do
+      with_headers(builder, %{key => Enum.join([curr, value], w)})
+    else
+      with_headers(builder, %{key => value})
+    end
   end
 
   defimpl Inspect, for: Supabase.Fetcher do

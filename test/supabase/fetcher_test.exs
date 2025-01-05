@@ -165,7 +165,116 @@ defmodule Supabase.FetcherTest do
     end
   end
 
-  # VCR and "integration" tests
+  describe "get_query_param/3" do
+    setup ctx do
+      fetcher = ctx.client |> Fetcher.new() |> Fetcher.with_query(%{"key1" => "value1", "key2" => "value2"})
+      {:ok, Map.put(ctx, :fetcher, fetcher)}
+    end
+
+    test "retrieves an existing query parameter", %{fetcher: fetcher} do
+      assert Fetcher.get_query_param(fetcher, "key1") == "value1"
+    end
+
+    test "returns nil for a missing query parameter", %{fetcher: fetcher} do
+      assert Fetcher.get_query_param(fetcher, "key3") == nil
+    end
+
+    test "returns the default value for a missing query parameter", %{fetcher: fetcher} do
+      assert Fetcher.get_query_param(fetcher, "key3", "default_value") == "default_value"
+    end
+
+    test "handles empty query parameters gracefully", %{client: client} do
+      fetcher = Fetcher.new(client)
+      assert Fetcher.get_query_param(fetcher, "key") == nil
+    end
+  end
+
+  describe "get_req_header/3" do
+    setup ctx do
+      fetcher =
+        Fetcher.new(ctx.client)
+        |> Fetcher.with_headers(%{
+          "Authorization" => "Bearer token",
+          "Content-Type" => "application/json"
+        })
+
+      {:ok, fetcher: fetcher}
+    end
+
+    test "retrieves an existing header", %{fetcher: fetcher} do
+      assert Fetcher.get_req_header(fetcher, "Authorization") == "Bearer token"
+    end
+
+    test "returns nil for a missing header", %{fetcher: fetcher} do
+      assert Fetcher.get_req_header(fetcher, "Accept") == nil
+    end
+
+    test "returns the default value for a missing header", %{fetcher: fetcher} do
+      assert Fetcher.get_req_header(fetcher, "Accept", "application/xml") == "application/xml"
+    end
+
+    test "handles empty headers gracefully", %{client: client} do
+      fetcher = Fetcher.new(client)
+      assert Fetcher.get_req_header(fetcher, "Authorization") == nil
+    end
+  end
+
+  describe "merge_query_param/4" do
+    setup ctx do
+      fetcher = Fetcher.new(ctx.client) |> Fetcher.with_query(%{"key1" => "value1"})
+      {:ok, fetcher: fetcher}
+    end
+
+    test "merges a new query parameter when key does not exist", %{fetcher: fetcher} do
+      updated_fetcher = Fetcher.merge_query_param(fetcher, "key2", "value2")
+      assert Fetcher.get_query_param(updated_fetcher, "key2") == "value2"
+    end
+
+    test "merges with default separator when key exists", %{fetcher: fetcher} do
+      updated_fetcher = Fetcher.merge_query_param(fetcher, "key1", "value2")
+      assert Fetcher.get_query_param(updated_fetcher, "key1") == "value1,value2"
+    end
+
+    test "merges with custom separator when specified", %{fetcher: fetcher} do
+      updated_fetcher = Fetcher.merge_query_param(fetcher, "key1", "value2", [with: "|"])
+      assert Fetcher.get_query_param(updated_fetcher, "key1") == "value1|value2"
+    end
+
+    test "handles merging into an empty query", %{client: client} do
+      fetcher = Fetcher.new(client)
+      updated_fetcher = Fetcher.merge_query_param(fetcher, "key1", "value1")
+      assert Fetcher.get_query_param(updated_fetcher, "key1") == "value1"
+    end
+  end
+
+  describe "merge_req_header/4" do
+    setup ctx do
+      fetcher = Fetcher.new(ctx.client) |> Fetcher.with_headers(%{"key1" => "value1"})
+      {:ok, fetcher: fetcher}
+    end
+
+    test "merges a new header value when key does not exist", %{fetcher: fetcher} do
+      updated_fetcher = Fetcher.merge_req_header(fetcher, "key2", "value2")
+      assert Fetcher.get_req_header(updated_fetcher, "key2") == "value2"
+    end
+
+    test "merges with default separator when key exists", %{fetcher: fetcher} do
+      updated_fetcher = Fetcher.merge_req_header(fetcher, "key1", "value2")
+      assert Fetcher.get_req_header(updated_fetcher, "key1") == "value1,value2"
+    end
+
+    test "merges with custom separator when specified", %{fetcher: fetcher} do
+      updated_fetcher = Fetcher.merge_req_header(fetcher, "key1", "value2", [with: "|"])
+      assert Fetcher.get_req_header(updated_fetcher, "key1") == "value1|value2"
+    end
+
+    test "handles merging into an empty header", %{client: client} do
+      fetcher = Fetcher.new(client)
+      updated_fetcher = Fetcher.merge_req_header(fetcher, "key1", "value1")
+      assert Fetcher.get_req_header(updated_fetcher, "key1") == "value1"
+    end
+  end
+
   defp have_header?(headers, name) do
     Enum.any?(headers, fn {k, _} ->
       String.downcase(k) == String.downcase(name)
