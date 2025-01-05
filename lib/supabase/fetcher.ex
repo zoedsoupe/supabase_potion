@@ -464,7 +464,9 @@ defmodule Supabase.Fetcher do
   Merge two collections of headers as an `Enumberable.t()`, avoiding duplicates and removing nullable headers
   - aka `nil` values.
 
-  Note that this function is **left-associative** in terms of header priority.
+  Note that this function is **right-associative** in terms of header priority,
+  this means that any duplicate new header that is passed to this function
+  will **overwrite** the last definition, take caution with it.
   """
   @spec merge_headers(Enumerable.t(String.t()), Enumerable.t(String.t())) ::
           Finch.Request.headers()
@@ -472,10 +474,10 @@ defmodule Supabase.Fetcher do
     some = if is_list(some), do: some, else: Map.to_list(some)
     other = if is_list(other), do: other, else: Map.to_list(other)
 
-    some
-    |> Kernel.++(other)
-    |> Enum.uniq_by(fn {name, _} -> name end)
+    other
+    |> Kernel.++(some)
     |> Enum.reject(fn {_, v} -> is_nil(v) end)
+    |> Enum.uniq_by(fn {name, _} -> String.downcase(name) end)
   end
 
   @doc """
