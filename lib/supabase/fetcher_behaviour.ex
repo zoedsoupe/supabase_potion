@@ -1,24 +1,38 @@
 defmodule Supabase.FetcherBehaviour do
   @moduledoc "Defines Supabase HTTP Clients callbacks"
 
-  @typep nullable(a) :: a | nil
+  alias Supabase.Client
+  alias Supabase.Error
+  alias Supabase.Fetcher
 
-  @type url :: String.t() | URI.t()
-  @type body :: nullable(map) | map
-  @type headers :: [{String.t(), String.t()}]
-  @type opts :: [resolve_json: boolean] | []
-  @type response :: map | String.t()
-  @type reason :: String.t() | atom
-  @type method :: :get | :post
-  @type result :: {:ok, response} | {:error, reason}
+  @type result(a) :: {:ok, a} | {:error, Error.t()}
 
-  @callback get(url, body, headers, opts) :: result
-  @callback post(url, body, headers, opts) :: result
-  @callback put(url, body, headers, opts) :: result
-  @callback head(url, body, headers, opts) :: result
-  @callback patch(url, body, headers, opts) :: result
-  @callback delete(url, body, headers, opts) :: result
-  @callback upload(method, url, Path.t(), headers) :: result
-  @callback stream(url, headers, keyword) :: {:ok, stream} | {:error, reason}
-            when stream: Enumerable.t()
+  # builder functions
+  @callback new(Client.t()) :: Fetcher.t()
+  @callback with_method(Fetcher.t(), method) :: Fetcher.t()
+            when method: Finch.Request.method()
+  @callback with_database_url(Fetcher.t(), path :: String.t()) :: Fetcher.t()
+  @callback with_storage_url(Fetcher.t(), path :: String.t()) :: Fetcher.t()
+  @callback with_realtime_url(Fetcher.t(), path :: String.t()) :: Fetcher.t()
+  @callback with_functions_url(Fetcher.t(), path :: String.t()) :: Fetcher.t()
+  @callback with_auth_url(Fetcher.t(), path :: String.t()) :: Fetcher.t()
+  @callback with_query(Fetcher.t(), query :: Enumerable.t()) :: Fetcher.t()
+  @callback with_body(Fetcher.t(), body) :: Fetcher.t()
+            when body: Jason.Encoder.t() | {:stream, Enumerable.t()} | nil
+  @callback with_headers(Fetcher.t(), headers) :: Fetcher.t()
+            when headers: Finch.Request.headers()
+  @callback with_options(Fetcher.t(), options) :: Fetcher.t()
+            when options: Finch.request_opts()
+  @callback with_body_decoder(Fetcher.t(), decoder :: module) :: Fetcher.t()
+  @callback with_error_parser(Fetcher.t(), parser :: module) :: Fetcher.t()
+
+  # general helpers
+  @callback request(Fetcher.t()) :: result(Finch.Response.t())
+  @callback request_async(Fetcher.t()) :: result(Finch.Response.t())
+  @callback upload(Fetcher.t(), filepath :: Path.t()) :: result(Finch.Response.t())
+  @callback stream(Fetcher.t()) :: result(Enumerable.t())
+  @callback stream(Fetcher.t(), on_response) :: result(Enumerable.t())
+            when on_response: ({status :: integer, headers :: Finch.Request.headers(),
+                                body :: Enumerable.t()} ->
+                                 term)
 end
