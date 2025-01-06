@@ -1,4 +1,4 @@
-defmodule Supabase.FetcherBehaviour do
+defmodule Supabase.Fetcher.Behaviour do
   @moduledoc "Defines Supabase HTTP Clients callbacks"
 
   alias Supabase.Client
@@ -23,7 +23,10 @@ defmodule Supabase.FetcherBehaviour do
             when headers: Finch.Request.headers()
   @callback with_options(Fetcher.t(), options) :: Fetcher.t()
             when options: Finch.request_opts()
-  @callback with_body_decoder(Fetcher.t(), decoder :: module) :: Fetcher.t()
+  @callback with_body_decoder(Fetcher.t(), decoder, decoder_opts) :: Fetcher.t()
+            when decoder: module | decoder_fun,
+                decoder_opts: keyword,
+                decoder_fun: (Finch.Response.t, decoder_opts -> {:ok, body :: term} | {:error, term})
   @callback with_error_parser(Fetcher.t(), parser :: module) :: Fetcher.t()
 
   # general helpers

@@ -98,7 +98,7 @@ defmodule Supabase.Fetcher do
 
   alias Supabase.Client
 
-  @behaviour Supabase.FetcherBehaviour
+  @behaviour Supabase.Fetcher.Behaviour
 
   @type t :: %__MODULE__{
           client: Client.t(),
@@ -110,6 +110,7 @@ defmodule Supabase.Fetcher do
           service: Supabase.service(),
           query: list({String.t(), String.t()}),
           body_decoder: module,
+          body_decoder_opts: keyword,
           error_parser: module
         }
 
@@ -122,6 +123,7 @@ defmodule Supabase.Fetcher do
     query: [],
     options: [],
     headers: [],
+    body_decoder_opts: [],
     body_decoder: Supabase.Fetcher.JSONDecoder,
     error_parser: Supabase.ErrorParser
   ]
@@ -160,13 +162,14 @@ defmodule Supabase.Fetcher do
   @doc """
   Attaches a custom body decoder to be called after a successfull response.
   The body decoder should implement the `Supabase.Fetcher.BodyDecoder` behaviour, and it default
-  to the `Supabase.Fetcher.JSONDecoder`.
+  to the `Supabase.Fetcher.JSONDecoder`, or it can be a 2-arity function that will follow the `Supabase.Fetcher.BodyDecoder.decode/1` callback interface.
 
   You can pass `nil` as the decoder to avoid body decoding, if you need the raw body.
   """
   @impl true
-  def with_body_decoder(%__MODULE__{} = builder, decoder) when is_atom(decoder) do
-    %{builder | body_decoder: decoder}
+  def with_body_decoder(%__MODULE__{} = builder, decoder, decoder_opts \\ [])
+      when (is_atom(decoder) or is_function(decoder, 2)) and is_list(decoder_opts) do
+    %{builder | body_decoder: decoder, body_decoder_opts: decoder_opts}
   end
 
   @doc """
@@ -408,8 +411,10 @@ defmodule Supabase.Fetcher do
 
   defp handle_response({:ok, %Finch.Response{} = resp}, %__MODULE__{} = builder) do
     error_parser = builder.error_parser
+    decoder = builder.body_decoder
+    decoder_opts = builder.body_decoder_opts
 
-    with {:ok, resp} <- decode_body(resp, builder.body_decoder) do
+    with {:ok, resp} <- decode_body(resp, decoder, decoder_opts) do
       if resp.status >= 400 do
         {:error, error_parser.from_http_response(resp, builder)}
       else
@@ -458,11 +463,18 @@ defmodule Supabase.Fetcher do
   @doc """
   Helper function to directly decode the body using a `Supabase.Fetcher.BodyDecoder`
   """
-  @spec decode_body(Finch.Response.t(), module | nil) ::
+  @spec decode_body(Finch.Response.t(), module | nil | fun, decoder_opts :: keyword) ::
           {:ok, Finch.Response.t()} | {:error, term}
-  def decode_body(%Finch.Response{} = resp, decoder \\ Supabase.Fetcher.JSONDecoder) do
+  def decode_body(resp, decoder \\ Supabase.Fetcher.JSONDecoder, opts \\ [])
+
+  def decode_body(%Finch.Response{} = resp, decoder, opts)
+      when is_function(decoder, 2) do
+    with {:ok, body} <- decoder.(resp, opts), do: {:ok, %{resp | body: body}}
+  end
+
+  def decode_body(%Finch.Response{} = resp, decoder, opts) do
     if decoder do
-      with {:ok, body} <- decoder.decode(resp), do: {:ok, %{resp | body: body}}
+      with {:ok, body} <- decoder.decode(resp, opts), do: {:ok, %{resp | body: body}}
     else
       {:ok, resp}
     end
