@@ -45,6 +45,9 @@ defmodule Supabase do
 
   alias Supabase.MissingSupabaseConfig
 
+  @typedoc "Helper typespec to define general success and error returns"
+  @type result(a) :: {:ok, a} | {:error, Supabase.Error.t()}
+
   @typedoc "The available Supabase services to interact with"
   @type service :: :database | :storage | :auth | :functions | :realtime
   @typep changeset :: Ecto.Changeset.t()

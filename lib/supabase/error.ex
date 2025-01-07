@@ -31,12 +31,11 @@ defmodule Supabase.Error do
   ## Custom Error Handling
 
   Libraries or users may define custom error parsers by implementing the 
-  `Supabase.Error` behaviour's `from_http_response/2` callback. 
-  This enables the transformation of raw HTTP responses into meaningful errors 
+  `Supabase.Error` behaviour's `from/2` callback from the `Supabase.ErrorParser`
+  protocol.
+  This enables the transformation of ANY structure into meaningful errors 
   specific to their application domain.
   """
-
-  alias Supabase.Fetcher
 
   @type t :: %__MODULE__{
           code: atom,
@@ -50,7 +49,7 @@ defmodule Supabase.Error do
   @doc "Creates a new `Supabase.Error` struct based on informed options"
   @spec new(keyword) :: t
   def new(attrs) when is_list(attrs) do
-    code = Keyword.get(attrs, :error, :unexpected)
+    code = Keyword.get(attrs, :code, :unexpected)
     message = Keyword.get(attrs, :message, humanize_error_code(code))
     service = Keyword.get(attrs, :service)
     metadata = Keyword.get(attrs, :metadata, %{})
@@ -69,10 +68,10 @@ defmodule Supabase.Error do
 
   @doc """
   Helper function to construct the metadata fields for when building
-  an error from a HTTP response, based into the "context", aka `Supabase.Fetcher`.
+  an error from a HTTP response, based into the "context", aka `Supabase.Request`.
   """
-  @spec make_default_http_metadata(Fetcher.t()) :: map
-  def make_default_http_metadata(%Fetcher{} = ctx) do
+  @spec make_default_http_metadata(Supabase.Fetcher.Request.t()) :: map
+  def make_default_http_metadata(%Supabase.Fetcher.Request{} = ctx) do
     base_url = Map.get(ctx.client, :"#{ctx.service}_url")
     path = String.replace(to_string(ctx.url), base_url, "")
     headers = Enum.reject(ctx.headers, &(String.downcase(elem(&1, 0)) == "authorization"))
@@ -83,10 +82,6 @@ defmodule Supabase.Error do
       headers: headers
     }
   end
-
-  @callback from_http_response(response, context) :: t
-            when response: Finch.Response.t(),
-                 context: Supabase.Fetcher.t()
 
   defimpl Inspect, for: Supabase.Error do
     import Inspect.Algebra
@@ -105,12 +100,39 @@ defmodule Supabase.Error do
   end
 end
 
-defmodule Supabase.ErrorParser do
+defprotocol Supabase.ErrorParser do
+  @spec from(source :: term, context :: term | nil) :: Supabase.Error.t()
+  def from(source, context \\ nil)
+end
+
+defimpl Supabase.ErrorParser, for: File.Error do
+  def from(%File.Error{} = err, %Supabase.Fetcher.Request{} = ctx) do
+    message = File.Error.message(err)
+    metadata = Supabase.Error.make_default_http_metadata(ctx)
+
+    Supabase.Error.new(
+      code: :transport_error,
+      message: message,
+      service: ctx.service,
+      metadata: metadata
+    )
+  end
+
+  def from(%File.Error{} = err, _) do
+    message = File.Error.message(err)
+
+    Supabase.Error.new(
+      code: err.reason,
+      message: message
+    )
+  end
+end
+
+defimpl Supabase.ErrorParser, for: Supabase.Fetcher.Response do
   @moduledoc "The default error parser, generally used to return unexpected errors"
 
-  alias Supabase.Fetcher
-
-  @behaviour Supabase.Error
+  alias Supabase.Fetcher.Request
+  alias Supabase.Fetcher.Response
 
   @doc """
   The default error parser in case no one is provided via `Supabase.Fetcher.with_error_parser/2`.
@@ -136,7 +158,7 @@ defmodule Supabase.ErrorParser do
   All other fields are filled with the `Supabase.Fetcher` struct as context.
   """
   @impl true
-  def from_http_response(%Finch.Response{} = resp, %Fetcher{} = context) do
+  def from(%Response{} = resp, %Request{} = context) do
     code = parse_status(resp.status)
     message = Supabase.Error.humanize_error_code(code)
     metadata = Supabase.Error.make_default_http_metadata(context)
@@ -161,7 +183,7 @@ defmodule Supabase.ErrorParser do
   defp parse_status(422), do: :unprocessable_entity
   defp parse_status(423), do: :resource_locked
   defp parse_status(429), do: :too_many_requests
-  defp parse_status(500), do: :internal_server_error
+  defp parse_status(500), do: :server_error
   defp parse_status(501), do: :not_implemented
   defp parse_status(503), do: :service_unavailable
   defp parse_status(504), do: :gateway_timeout
