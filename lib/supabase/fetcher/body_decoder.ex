@@ -18,19 +18,23 @@ defmodule Supabase.Fetcher.BodyDecoder do
   so they'll be available as the second parameter of the `decode/2` behaviour function.
   """
 
-  @callback decode(Finch.Response.t(), options) :: {:ok, body :: term} | {:error, term}
-    when options: keyword
+  alias Supabase.Fetcher.Response
+
+  @callback decode(Response.t(), options) :: {:ok, body :: term} | {:error, term}
+            when options: keyword
 end
 
 defmodule Supabase.Fetcher.JSONDecoder do
   @moduledoc "The default body decoder to HTTP responses"
 
+  alias Supabase.Fetcher.Response
+
   @behaviour Supabase.Fetcher.BodyDecoder
 
   @doc "Tries to decode the response body as JSON"
   @impl true
-  def decode(%Finch.Response{body: body}, opts \\ []) do
-    keys = Keyword.get(opts, :keys, "strings")
+  def decode(%Response{body: body}, opts \\ []) do
+    keys = Keyword.get(opts, :keys, :strings)
     Jason.decode(body, keys: keys)
   end
 end
