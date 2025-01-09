@@ -19,6 +19,7 @@ defmodule Supabase.Client.Global do
     field(:headers, {:map, :string}, default: %{})
   end
 
+  @spec changeset(t, map) :: Ecto.Changeset.t()
   def changeset(schema, params) do
     schema
     |> cast(params, [:headers])

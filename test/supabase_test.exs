@@ -6,21 +6,36 @@ defmodule SupabaseTest do
 
   describe "init_client/1" do
     test "should return a valid client on valid attrs" do
-      {:ok, %Client{} = client} =
-        Supabase.init_client("https://test.supabase.co", "test")
+      assert {:ok, %Client{} = client} =
+               Supabase.init_client("https://test.supabase.co", "test")
 
-      assert client.conn.base_url == "https://test.supabase.co"
-      assert client.conn.api_key == "test"
+      assert client.base_url == "https://test.supabase.co"
+      assert client.api_key == "test"
+    end
+
+    test "should return a valid client on valid attrs and additional attrs" do
+      assert {:ok, %Client{} = client} =
+               Supabase.init_client("https://test.supabase.co", "test",
+                 auth: [debug: true, storage_key: "test-key"],
+                 db: [schema: "custom"]
+               )
+
+      assert client.base_url == "https://test.supabase.co"
+      assert client.api_key == "test"
+      assert client.auth.debug
+      assert client.auth.storage_key == "test-key"
+      assert client.db.schema == "custom"
     end
   end
 
   describe "init_client!/1" do
     test "should return a valid client on valid attrs" do
-      assert %Client{} = client =
-        Supabase.init_client!("https://test.supabase.co", "test")
+      assert %Client{} =
+               client =
+               Supabase.init_client!("https://test.supabase.co", "test")
 
-      assert client.conn.base_url == "https://test.supabase.co"
-      assert client.conn.api_key == "test"
+      assert client.base_url == "https://test.supabase.co"
+      assert client.api_key == "test"
     end
 
     test "should raise MissingSupabaseConfig on missing base_url" do

@@ -14,9 +14,9 @@ defmodule Supabase do
   This package represents the base SDK for Supabase. That means
   that it not includes all of the functionality of the Supabase client integrations, so you need to install each feature separetely, as:
 
-  - [Auth/GoTrue](https://github.com/zoedsoupe/gotrue-ex)
-  - [Storage](https://github.com/zoedsoupe/storage-ex)
-  - [PostgREST](https://github.com/zoedsoupe/postgrest-ex)
+  - [Supabase.GoTrue](https://hexdocs.pm/supabase_gotrue)
+  - [Supabase.Storage](https://hexdocs.pm/supabase_storage)
+  - [Supabase.PostgREST](https://hexdocs.pm/supabase_postgrest)
   - `Realtime` - TODO
   - `UI` - TODO
 
@@ -47,18 +47,68 @@ defmodule Supabase do
 
   @typep changeset :: Ecto.Changeset.t()
 
-  @spec init_client(String.t(), String.t(), Client.params() | %{}) :: {:ok, Client.t()} | {:error, changeset}
+  @doc """
+  Creates a new one off Supabase client, you you wanna a self managed client, that
+  levarages an [Agent][https://hexdocs.pm/elixir/Agent.html] instance that can
+  started in your application supervision tree, check the `Supabase.Client` module docs.
+
+  ## Parameters
+  - `base_url`: The unique Supabase URL which is supplied when you create a new project in your project dashboard.
+  - `api_key`: The unique Supabase Key which is supplied when you create a new project in your project dashboard.
+  - `options`: Additional options to configure the client behaviour, check `Supabase.Client.options()` typespec to check all available options.
+
+  ## Examples
+      iex> Supabase.init_client("https://<supabase-url>", "<supabase-api-key>")
+      iex> {:ok, %Supabase.Client{}}
+
+      iex> Supabase.init_client("https://<supabase-url>", "<supabase-api-key>",
+        db: [schema: "another"],
+        auth: [flow_type: :pkce],
+        global: [headers: %{"custom-header" => "custom-value"}]
+      )
+      iex> {:ok, %Supabase.Client{}}
+  """
+  @spec init_client(supabase_url, supabase_key, options) ::
+          {:ok, Client.t()} | {:error, changeset}
+        when supabase_url: String.t(),
+             supabase_key: String.t(),
+             options: Enumerable.t()
   def init_client(url, api_key, opts \\ %{})
-    when is_binary(url) and is_binary(api_key) do
+      when is_binary(url) and is_binary(api_key) do
     opts
-    |> Map.put(:conn, %{base_url: url, api_key: api_key})
-    |> Map.update(:conn, opts, &Map.merge(&1, opts[:conn] || %{}))
-    |> Client.parse()
+    |> Map.new()
+    |> Map.put(:base_url, url)
+    |> Map.put(:api_key, api_key)
+    |> then(&Client.changeset(%Client{}, &1))
+    |> Ecto.Changeset.apply_action(:parse)
+    |> then(&maybe_put_storage_key/1)
   end
 
-  @spec init_client!(String.t, String.t, Client.params | %{}) :: Client.t() | no_return
-  def init_client!(url, api_key, %{} = opts \\ %{})
-    when is_binary(url) and is_binary(api_key) do
+  defp maybe_put_storage_key({:ok, %Client{base_url: base_url} = client}) do
+    maybe_default = &(Function.identity(&1) || default_storage_key(base_url))
+    {:ok, update_in(client.auth.storage_key, maybe_default)}
+  end
+
+  defp maybe_put_storage_key(other), do: other
+
+  defp default_storage_key(base_url) when is_binary(base_url) do
+    base_url
+    |> URI.parse()
+    |> then(&String.split(&1.host, ".", trim: true))
+    |> List.first()
+    |> then(&"sb-#{&1}-auth-token")
+  end
+
+  @doc """
+  Same as `Supabase.init_client/3` but raises if any errors occurs while
+  parsing the client options.
+  """
+  @spec init_client!(supabase_url, supabase_key, options) :: Client.t()
+        when supabase_url: String.t(),
+             supabase_key: String.t(),
+             options: Enumerable.t()
+  def init_client!(url, api_key, opts \\ %{})
+      when is_binary(url) and is_binary(api_key) do
     case init_client(url, api_key, opts) do
       {:ok, client} ->
         client
@@ -66,11 +116,11 @@ defmodule Supabase do
       {:error, changeset} ->
         errors = errors_on_changeset(changeset)
 
-        if "can't be blank" in (get_in(errors, [:conn, :api_key]) || []) do
+        if "can't be blank" in (errors[:api_key] || []) do
           raise MissingSupabaseConfig, key: :key, client: nil
         end
 
-        if "can't be blank" in (get_in(errors, [:conn, :base_url]) || []) do
+        if "can't be blank" in (errors[:base_url] || []) do
           raise MissingSupabaseConfig, key: :url, client: nil
         end
 
@@ -88,20 +138,5 @@ defmodule Supabase do
 
   defmacro __using__(which) when is_atom(which) do
     apply(__MODULE__, which, [])
-  end
-
-  def schema do
-    quote do
-      use Ecto.Schema
-      import Ecto.Changeset
-      alias __MODULE__
-
-      @opaque changeset :: Ecto.Changeset.t()
-
-      @callback changeset(__MODULE__.t(), map) :: changeset
-      @callback parse(map) :: {:ok, __MODULE__.t()} | {:error, changeset}
-
-      @optional_callbacks changeset: 2, parse: 1
-    end
   end
 end
