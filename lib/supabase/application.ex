@@ -25,5 +25,5 @@ defmodule Supabase.Application do
     if pred.(env), do: children ++ [child], else: children
   end
 
-  defp get_env, do: Application.get_env(:supabase_potion, :env, :dev)
+  defp get_env, do: Application.get_env(:supabase_potion, :env)
 end

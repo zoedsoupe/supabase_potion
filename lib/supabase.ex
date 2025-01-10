@@ -45,6 +45,11 @@ defmodule Supabase do
 
   alias Supabase.MissingSupabaseConfig
 
+  @typedoc "Helper typespec to define general success and error returns"
+  @type result(a) :: {:ok, a} | {:error, Supabase.Error.t()}
+
+  @typedoc "The available Supabase services to interact with"
+  @type service :: :database | :storage | :auth | :functions | :realtime
   @typep changeset :: Ecto.Changeset.t()
 
   @doc """
@@ -82,6 +87,7 @@ defmodule Supabase do
     |> then(&Client.changeset(%Client{}, &1))
     |> Ecto.Changeset.apply_action(:parse)
     |> then(&maybe_put_storage_key/1)
+    |> then(&put_default_headers/1)
   end
 
   defp maybe_put_storage_key({:ok, %Client{base_url: base_url} = client}) do
@@ -97,6 +103,26 @@ defmodule Supabase do
     |> then(&String.split(&1.host, ".", trim: true))
     |> List.first()
     |> then(&"sb-#{&1}-auth-token")
+  end
+
+  defp put_default_headers({:ok, %Client{global: g} = client}) do
+    headers = Supabase.Fetcher.merge_headers(g.headers, default_headers())
+    {:ok, put_in(client.global.headers, Map.new(headers))}
+  end
+
+  defp put_default_headers(other), do: other
+
+  defp default_headers do
+    %{
+      "x-client-info" => "supabase-fetch-elixir/#{version()}",
+      "user-agent" => "SupabasePotion/#{version()}"
+    }
+  end
+
+  @spec version :: String.t()
+  defp version do
+    {:ok, vsn} = :application.get_key(:supabase_potion, :vsn)
+    List.to_string(vsn)
   end
 
   @doc """
