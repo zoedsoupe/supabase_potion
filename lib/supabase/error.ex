@@ -72,7 +72,8 @@ defmodule Supabase.Error do
   """
   @spec make_default_http_metadata(Supabase.Fetcher.Request.t()) :: map
   def make_default_http_metadata(%Supabase.Fetcher.Request{} = ctx) do
-    base_url = Map.get(ctx.client, :"#{ctx.service}_url")
+    service_key = if service = ctx.service, do: :"#{service}_url"
+    base_url = Map.get(ctx.client, service_key)
     path = String.replace(to_string(ctx.url), base_url, "")
     headers = Enum.reject(ctx.headers, &(String.downcase(elem(&1, 0)) == "authorization"))
 
@@ -158,17 +159,12 @@ defimpl Supabase.ErrorParser, for: Supabase.Fetcher.Response do
   All other fields are filled with the `Supabase.Fetcher` struct as context.
   """
   @impl true
-  def from(%Response{} = resp, %Request{} = context) do
+  def from(%Response{} = resp, %Request{service: service} = ctx) do
     code = parse_status(resp.status)
-    message = Supabase.Error.humanize_error_code(code)
-    metadata = Supabase.Error.make_default_http_metadata(context)
+    metadata = Supabase.Error.make_default_http_metadata(ctx)
+    metadata = Map.merge(metadata, %{resp_status: resp.status, resp_body: resp.body})
 
-    %Supabase.Error{
-      code: code,
-      message: message,
-      service: context.service,
-      metadata: Map.merge(metadata, %{status: resp.status, resp_body: resp.body})
-    }
+    Supabase.Error.new(code: code, service: service, metadata: metadata)
   end
 
   defp parse_status(400), do: :bad_request

@@ -247,6 +247,20 @@ defmodule Supabase.Fetcher do
         {:ok, resp}
       end
     end
+  rescue
+    e in Protocol.UndefinedError ->
+      reraise e, __STACKTRACE__
+
+    exception ->
+      message = Exception.format(:error, exception)
+      stacktrace = Exception.format_stacktrace(__STACKTRACE__)
+
+      Supabase.Error.new(
+        code: :decode_body_failed,
+        message: message,
+        service: builder.service,
+        metadata: %{stacktrace: stacktrace}
+      )
   end
 
   defp handle_response({:error, %Error{} = err}, %Request{} = builder) do
