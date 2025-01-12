@@ -66,6 +66,8 @@ defmodule Supabase.Fetcher.Request do
 
   @behaviour Supabase.Fetcher.Request.Behaviour
 
+  @type options :: list({:decode_body?, boolean} | {:parse_http_error?, boolean})
+
   @type t :: %__MODULE__{
           client: Client.t(),
           method: Supabase.Fetcher.method(),
@@ -77,7 +79,8 @@ defmodule Supabase.Fetcher.Request do
           body_decoder: module,
           body_decoder_opts: keyword,
           error_parser: module,
-          http_client: module
+          http_client: module,
+          options: options
         }
 
   defstruct [
@@ -90,8 +93,9 @@ defmodule Supabase.Fetcher.Request do
     headers: [],
     body_decoder_opts: [],
     body_decoder: Supabase.Fetcher.JSONDecoder,
-    error_parser: Supabase.ErrorParser,
-    http_client: Supabase.Fetcher.Adapter.Finch
+    error_parser: Supabase.HTTPErrorParser,
+    http_client: Supabase.Fetcher.Adapter.Finch,
+    options: [decode_body?: false, parse_http_error?: false]
   ]
 
   @doc """
@@ -100,13 +104,14 @@ defmodule Supabase.Fetcher.Request do
   easily composed using the `with_` functions of this module.
   """
   @impl true
-  def new(%Client{global: global} = client) do
+  def new(%Client{global: global} = client, opts \\ []) when is_list(opts) do
     headers =
       global.headers
       |> Map.put("authorization", "Bearer " <> client.access_token)
       |> Map.to_list()
 
     %__MODULE__{client: client, headers: headers}
+    |> Map.update!(:options, &Keyword.merge(&1, opts))
   end
 
   @services [:auth, :functions, :storage, :realtime, :database]
@@ -139,11 +144,14 @@ defmodule Supabase.Fetcher.Request do
   end
 
   @doc """
-  Attaches a custom error parser to be called after a successfull response.
+  Attaches a custom error parser to be called after a "successfull" response.
   The error parser should implement the `Supabase.Error` behaviour, and it default
-  to the `Supabase.ErrorParser`.
+  to the `Supabase.HTTPErrorParser`.
 
-  THis attribute can't be overwritten.
+  "successful" response means that the fetcher actually got a HTTP response from
+  the server, so if the HTTP status is >= 400, so this error parser will be invoked.
+
+  Check `Supabase.HTTPErrorParser` for an example of implementation.
   """
   @impl true
   def with_error_parser(%__MODULE__{} = builder, parser)

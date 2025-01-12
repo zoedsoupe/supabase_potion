@@ -5,7 +5,11 @@ defmodule Supabase.Fetcher.Response do
   same structure
   """
 
-  @type t :: %__MODULE__{status: Supabase.Fetcher.status(), headers: Supabase.Fetcher.headers(), body: Supabase.Fetcher.body()}
+  @type t :: %__MODULE__{
+          status: Supabase.Fetcher.status(),
+          headers: Supabase.Fetcher.headers(),
+          body: Supabase.Fetcher.body()
+        }
 
   defstruct [:status, :headers, :body]
 

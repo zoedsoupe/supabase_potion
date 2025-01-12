@@ -10,32 +10,32 @@ defmodule Supabase.MissingSupabaseConfig do
     Missing #{missing} configuration for your Supabase Client #{if client, do: client, else: ""}.
 
     #{if client do
-    """
-    Please ensure or add the following to your config/config.exs file:
+      """
+      Please ensure or add the following to your config/config.exs file:
 
-        import Config
+          import Config
 
-        config :supabase_potion, #{client},
-          base_url: "https://<app-name>.supabase.co",
-          api_key: "<supabase-api-key>",
-          conn: %{access_token: "<supabase-access-token>"},
-          db: %{schema: "another"}, # default to public
-          auth: %{debug: true}
+          config :supabase_potion, #{client},
+            base_url: "https://<app-name>.supabase.co",
+            api_key: "<supabase-api-key>",
+            conn: %{access_token: "<supabase-access-token>"},
+            db: %{schema: "another"}, # default to public
+            auth: %{debug: true}
 
-    Remember to set the environment variables SUPABASE_BASE_URL and SUPABASE_API_KEY
-    if you choose this option. Otherwise you can pass the values directly to the config file.
-    """
+      Remember to set the environment variables SUPABASE_BASE_URL and SUPABASE_API_KEY
+      if you choose this option. Otherwise you can pass the values directly to the config file.
+      """
     end}
 
     #{if is_nil(client) do
-    """
-    Please ensure you're passing the values directly to the `Supabase.init_client/3` function:
+      """
+      Please ensure you're passing the values directly to the `Supabase.init_client/3` function:
 
-        iex> Supabase.init_client!(
-        iex>   System.fetch_env!("SUPABASE_BASE_URL"),
-        iex>   System.fetch_env!("SUPABASE_API_KEY"),
-        iex> )
-    """
+          iex> Supabase.init_client!(
+          iex>   System.fetch_env!("SUPABASE_BASE_URL"),
+          iex>   System.fetch_env!("SUPABASE_API_KEY"),
+          iex> )
+      """
     end}
 
     #{walktrough}

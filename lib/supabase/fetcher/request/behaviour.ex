@@ -16,7 +16,7 @@ defmodule Supabase.Fetcher.Request.Behaviour do
   @callback with_body(Request.t(), body) :: Request.t()
             when body: Jason.Encoder.t() | {:stream, Enumerable.t()} | nil
   @callback with_headers(Request.t(), headers) :: Request.t()
-    when headers: Supabase.Fetcher.headers()
+            when headers: Supabase.Fetcher.headers()
   @callback with_body_decoder(Request.t(), decoder, decoder_opts) :: Request.t()
             when decoder: module | decoder_fun,
                  decoder_opts: keyword,

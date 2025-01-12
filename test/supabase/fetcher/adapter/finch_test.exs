@@ -94,17 +94,23 @@ defmodule Supabase.Fetcher.Adapter.FinchTest do
         {:error, %Mint.TransportError{reason: :timeout}}
       end)
 
-      assert {:error, %Error{code: :transport_error, message: "timeout"}} =
-               Fetcher.request(builder)
+      assert {:error, err} = Fetcher.request(builder)
+
+      assert %Error{
+               code: :unexpected,
+               metadata: %{raw_error: %Mint.TransportError{reason: :timeout}}
+             } = err
     end
 
-    test "handles file errors on upload", %{builder: builder} do
+    test "handles exceptions", %{builder: builder} do
       @mock
       |> expect(:upload, fn _builder, _file_path, _opts ->
         raise File.Error, reason: :enoent, path: "doesnt-matter", action: "read file stats"
       end)
 
-      assert {:error, %Error{code: :enoent} = err} = Fetcher.upload(builder, "doesnt-matter")
+      assert {:error, err} = Fetcher.upload(builder, "doesnt-matter")
+      assert %Error{code: :exception, metadata: %{exception: file_error}} = err
+      assert is_exception(file_error, File.Error)
       assert err.message =~ "could not read file stats"
     end
   end

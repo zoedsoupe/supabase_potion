@@ -158,6 +158,8 @@ defmodule Supabase.Fetcher do
       {:ok, ResponseAdapter.from(resp)}
     end
     |> handle_response(builder)
+  rescue
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
   @doc """
@@ -182,6 +184,8 @@ defmodule Supabase.Fetcher do
       {:ok, ResponseAdapter.from(resp)}
     end
     |> handle_response(builder)
+  rescue
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
   @doc """
@@ -208,6 +212,8 @@ defmodule Supabase.Fetcher do
       {:ok, ResponseAdapter.from(resp)}
     end
     |> handle_response(builder)
+  rescue
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
   def stream(%Request{http_client: http_client} = builder, on_response, opts)
@@ -216,6 +222,8 @@ defmodule Supabase.Fetcher do
       {:ok, ResponseAdapter.from(resp)}
     end
     |> handle_response(builder)
+  rescue
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
   @doc """
@@ -229,38 +237,34 @@ defmodule Supabase.Fetcher do
     end
     |> handle_response(builder)
   rescue
-    e in File.Error -> {:error, Supabase.ErrorParser.from(e)}
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
   @spec handle_response({:ok, response} | {:error, term}, context) :: Supabase.result(response)
         when response: Response.t(),
              context: Request.t()
   defp handle_response({:ok, %Response{} = resp}, %Request{} = builder) do
-    error_parser = builder.error_parser
+    decode_body? = builder.options[:decode_body?] || true
+    parse_http_err? = builder.options[:parse_http_error?] || true
+    http_error_parser = builder.error_parser
     decoder = builder.body_decoder
     decoder_opts = builder.body_decoder_opts
 
-    with {:ok, resp} <- Response.decode_body(resp, decoder, decoder_opts) do
-      if resp.status >= 400 do
-        {:error, error_parser.from(resp, builder)}
+    maybe_decode_body = fn ->
+      if decode_body? do
+        Response.decode_body(resp, decoder, decoder_opts)
+      else
+        resp
+      end
+    end
+
+    with {:ok, resp} <- maybe_decode_body.() do
+      if parse_http_err? and resp.status >= 400 do
+        {:error, http_error_parser.from(resp, builder)}
       else
         {:ok, resp}
       end
     end
-  rescue
-    e in Protocol.UndefinedError ->
-      reraise e, __STACKTRACE__
-
-    exception ->
-      message = Exception.format(:error, exception)
-      stacktrace = Exception.format_stacktrace(__STACKTRACE__)
-
-      Supabase.Error.new(
-        code: :decode_body_failed,
-        message: message,
-        service: builder.service,
-        metadata: %{stacktrace: stacktrace}
-      )
   end
 
   defp handle_response({:error, %Error{} = err}, %Request{} = builder) do
@@ -270,7 +274,28 @@ defmodule Supabase.Fetcher do
   end
 
   defp handle_response({:error, err}, %Request{} = builder) do
-    {:error, Supabase.ErrorParser.from(err, builder)}
+    metadata = Error.make_default_http_metadata(builder)
+
+    {:error,
+     Error.new(
+       code: :unexpected,
+       service: builder.service,
+       metadata: Map.put(metadata, :raw_error, err)
+     )}
+  end
+
+  defp handle_exception(exception, stacktrace, %Request{} = builder) do
+    entity = Map.get(exception, :__struct__)
+    message = entity.message(exception)
+    stacktrace = Exception.format_stacktrace(stacktrace)
+
+    {:error,
+     Supabase.Error.new(
+       code: :exception,
+       message: message,
+       service: builder.service,
+       metadata: %{stacktrace: stacktrace, exception: exception}
+     )}
   end
 
   @doc """

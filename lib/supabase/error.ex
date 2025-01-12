@@ -37,6 +37,9 @@ defmodule Supabase.Error do
   specific to their application domain.
   """
 
+  alias Supabase.Fetcher.Request
+  alias Supabase.Fetcher.Response
+
   @type t :: %__MODULE__{
           code: atom,
           message: String.t(),
@@ -45,6 +48,9 @@ defmodule Supabase.Error do
         }
 
   defstruct [:message, :service, code: :unexpected, metadata: %{}]
+
+  @doc "Callback used on invoking the HTTP error parsed on a response (status >= 400)"
+  @callback from(source :: term, context :: term) :: t
 
   @doc "Creates a new `Supabase.Error` struct based on informed options"
   @spec new(keyword) :: t
@@ -101,41 +107,8 @@ defmodule Supabase.Error do
   end
 end
 
-defprotocol Supabase.ErrorParser do
-  @spec from(source :: term, context :: term | nil) :: Supabase.Error.t()
-  def from(source, context \\ nil)
-end
-
-defimpl Supabase.ErrorParser, for: File.Error do
-  def from(%File.Error{} = err, %Supabase.Fetcher.Request{} = ctx) do
-    message = File.Error.message(err)
-    metadata = Supabase.Error.make_default_http_metadata(ctx)
-
-    Supabase.Error.new(
-      code: :transport_error,
-      message: message,
-      service: ctx.service,
-      metadata: metadata
-    )
-  end
-
-  def from(%File.Error{} = err, _) do
-    message = File.Error.message(err)
-
-    Supabase.Error.new(
-      code: err.reason,
-      message: message
-    )
-  end
-end
-
-defimpl Supabase.ErrorParser, for: Supabase.Fetcher.Response do
-  @moduledoc "The default error parser, generally used to return unexpected errors"
-
-  alias Supabase.Fetcher.Request
-  alias Supabase.Fetcher.Response
-
-  @doc """
+defmodule Supabase.HTTPErrorParser do
+  @moduledoc """
   The default error parser in case no one is provided via `Supabase.Fetcher.with_error_parser/2`.
 
   Error parsers should be implement firstly by adjacent services libraries, to
@@ -156,10 +129,17 @@ defimpl Supabase.ErrorParser, for: Supabase.Fetcher.Response do
         headers: []
       }
 
-  All other fields are filled with the `Supabase.Fetcher` struct as context.
+  All other fields are filled with the `Supabase.Request` struct as context,
+  if available.
   """
-  @impl true
-  def from(%Response{} = resp, %Request{service: service} = ctx) do
+
+  alias Supabase.Fetcher.Request
+  alias Supabase.Fetcher.Response
+
+  @behaviour Supabase.Error
+
+  def from(%Response{} = resp, %Request{service: service} = ctx)
+      when resp.status >= 400 do
     code = parse_status(resp.status)
     metadata = Supabase.Error.make_default_http_metadata(ctx)
     metadata = Map.merge(metadata, %{resp_status: resp.status, resp_body: resp.body})

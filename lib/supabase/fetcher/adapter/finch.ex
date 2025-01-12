@@ -135,32 +135,4 @@ defmodule Supabase.Fetcher.Adapter.Finch do
       %Supabase.Fetcher.Response{status: resp.status, headers: resp.headers, body: resp.body}
     end
   end
-
-  defimpl Supabase.ErrorParser, for: Mint.TransportError do
-    def from(%Mint.TransportError{} = err, %Supabase.Fetcher.Request{} = ctx) do
-      message = Mint.TransportError.message(err)
-      metadata = Supabase.Error.make_default_http_metadata(ctx)
-
-      Supabase.Error.new(
-        code: :transport_error,
-        message: message,
-        service: ctx.service,
-        metadata: metadata
-      )
-    end
-  end
-
-  defimpl Supabase.ErrorParser, for: Mint.HTTPError do
-    def from(%Mint.HTTPError{} = err, %Supabase.Fetcher.Request{} = ctx) do
-      message = Mint.HTTPError.message(err)
-      metadata = Supabase.Error.make_default_http_metadata(ctx)
-
-      Supabase.Error.new(
-        code: :http_error,
-        message: message,
-        service: ctx.service,
-        metadata: metadata
-      )
-    end
-  end
 end
