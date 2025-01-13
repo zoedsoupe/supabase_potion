@@ -77,14 +77,14 @@ defmodule Supabase do
           {:ok, Client.t()} | {:error, changeset}
         when supabase_url: String.t(),
              supabase_key: String.t(),
-             options: Enumerable.t()
+             options: Client.options()
   def init_client(url, api_key, opts \\ %{})
       when is_binary(url) and is_binary(api_key) do
     opts
     |> Map.new()
     |> Map.put(:base_url, url)
     |> Map.put(:api_key, api_key)
-    |> then(&Client.changeset(%Client{}, &1))
+    |> Client.changeset()
     |> Ecto.Changeset.apply_action(:parse)
     |> then(&maybe_put_storage_key/1)
     |> then(&put_default_headers/1)

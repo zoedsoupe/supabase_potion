@@ -40,3 +40,6 @@ result
 .elixir_ls/
 .elixir-tools/
 .lexical/
+
+# Dialyzer
+/priv/plts/

@@ -16,14 +16,18 @@ defmodule Supabase.Application do
     Supervisor.start_link(children, opts)
   end
 
-  @spec maybe_append_child(list(Supervisor.child_spec()), (env -> bool), Supervisor.child_spec()) ::
-          list(Supervisor.child_spec())
-        when env: :dev | :prod | :test
+  @spec maybe_append_child([child], (env -> boolean()), child) :: [child]
+        when env: :dev | :prod | :test | nil, child: Supervisor.module_spec()
   defp maybe_append_child(children, pred, child) do
     env = get_env()
 
-    if pred.(env), do: children ++ [child], else: children
+    cond do
+      is_nil(env) -> children
+      pred.(env) -> children ++ [child]
+      not pred.(env) -> children
+    end
   end
 
+  @spec get_env :: :dev | :prod | :test | nil
   defp get_env, do: Application.get_env(:supabase_potion, :env)
 end

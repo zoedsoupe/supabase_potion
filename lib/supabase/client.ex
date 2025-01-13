@@ -116,9 +116,9 @@ defmodule Supabase.Client do
   Note that these options can be passed to `Supabase.init_client/3` as `Enumerable`, which means it can be either a `Keyword.t()` or a `Map.t()`, but internally it will be passed as a map.
   """
   @type options :: %{
-          db: Db.params(),
-          global: Global.params(),
-          auth: Auth.params()
+          optional(:db) => Db.params(),
+          optional(:global) => Global.params(),
+          optional(:auth) => Auth.params()
         }
 
   defmacro __using__(otp_app: otp_app) do
@@ -265,18 +265,9 @@ defmodule Supabase.Client do
     embeds_one(:auth, Auth, defaults_to_struct: true, on_replace: :update)
   end
 
-  @spec changeset(source, attrs) :: {:ok, t} | {:error, changeset}
-        when source: t(),
-             changeset: Ecto.Changeset.t(),
-             attrs: %{
-               base_url: String.t(),
-               api_key: String.t(),
-               db: Db.params(),
-               global: Global.params(),
-               auth: Auth.params()
-             }
-  def changeset(%__MODULE__{} = source, %{base_url: base_url, api_key: api_key} = attrs) do
-    source
+  @spec changeset(attrs :: map) :: Ecto.Changeset.t()
+  def changeset(%{base_url: base_url, api_key: api_key} = attrs) do
+    %__MODULE__{}
     |> cast(attrs, [:api_key, :base_url, :access_token])
     |> put_change(:access_token, attrs[:access_token] || api_key)
     |> cast_embed(:db, required: false)

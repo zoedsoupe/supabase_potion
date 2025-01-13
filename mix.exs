@@ -14,7 +14,8 @@ defmodule Supabase.MixProject do
       docs: docs(),
       package: package(),
       description: description(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      dialyzer: [plt_local_path: "priv/plts", ignore_warnings: ".dialyzerignore"]
     ]
   end
 
@@ -35,9 +36,9 @@ defmodule Supabase.MixProject do
       {:jason, "~> 1.4"},
       {:ecto, "~> 3.10"},
       {:mox, "~> 1.2", only: :test},
-      {:ex_doc, ">= 0.0.0", runtime: false, only: [:dev, :prod]},
+      {:ex_doc, ">= 0.0.0", only: [:dev], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:dialyxir, "~> 1.3", only: [:dev], runtime: false}
+      {:dialyxir, "~> 1.3", only: [:dev, :test], runtime: false}
     ]
   end
 
