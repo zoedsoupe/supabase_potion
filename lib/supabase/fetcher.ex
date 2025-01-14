@@ -165,7 +165,7 @@ defmodule Supabase.Fetcher do
   @doc """
   Executes the current request builder, asynchronously and returns the response.
   Note that this function does not **stream** the request, although it can use
-  a stream to consume chunks, as you can see an example in `Supabase.Fetcher.Adapter.Finch.request_async/2`.
+  a stream to consume chunks, as you can see an example in `Supabase.Fetcher.Adapter.Finch`.
 
   What happens here is that the request is done on a separate process, and the response
   is sent via message passing, in chunks, so no all HTTP client support async requests.
