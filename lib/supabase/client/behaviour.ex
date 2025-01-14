@@ -1,5 +1,5 @@
 defmodule Supabase.Client.Behaviour do
-  @doc """
+  @moduledoc """
   The behaviour for the Supabase Client. This behaviour is used to define the API for a Supabase Client.
 
   If you're implementing a [Self Managed Client](https://github.com/zoedsoupe/supabase-ex?tab=readme-ov-file#self-managed-clients) as the [Supabase.Client](https://hexdocs.pm/supabase_potion/Supabase.Client.html), this behaviour is already implemented for you.
@@ -12,6 +12,7 @@ defmodule Supabase.Client.Behaviour do
   @callback init :: {:ok, Client.t()} | {:error, Ecto.Changeset.t()}
   @callback get_client :: {:ok, Client.t()} | {:error, :not_found}
   @callback get_client(pid | atom) :: {:ok, Client.t()} | {:error, :not_found}
+  @callback set_auth(pid | atom, access_token :: String.t()) :: :ok
 
-  @optional_callbacks get_client: 0, get_client: 1
+  @optional_callbacks get_client: 0, get_client: 1, set_auth: 2
 end

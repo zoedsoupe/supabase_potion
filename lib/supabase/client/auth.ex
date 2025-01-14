@@ -22,13 +22,11 @@ defmodule Supabase.Client.Auth do
   import Ecto.Changeset
 
   @type t :: %__MODULE__{
-          uri: String.t(),
           auto_refresh_token: boolean(),
           debug: boolean(),
           detect_session_in_url: boolean(),
           flow_type: String.t(),
           persist_session: boolean(),
-          storage: String.t(),
           storage_key: String.t()
         }
 
@@ -38,47 +36,27 @@ defmodule Supabase.Client.Auth do
           detect_session_in_url: boolean(),
           flow_type: String.t(),
           persist_session: boolean(),
-          storage: String.t(),
           storage_key: String.t()
         }
 
-  @storage_key_template "sb-$host-auth-token"
+  @flow_types ~w[implicit pkce magicLink]a
 
   @primary_key false
   embedded_schema do
-    field(:uri, :string, default: "/auth/v1")
     field(:auto_refresh_token, :boolean, default: true)
     field(:debug, :boolean, default: false)
     field(:detect_session_in_url, :boolean, default: true)
-    field(:flow_type, Ecto.Enum, values: ~w[implicit pkce magicLink]a, default: :implicit)
+    field(:flow_type, Ecto.Enum, values: @flow_types, default: :implicit)
     field(:persist_session, :boolean, default: true)
-    field(:storage, :string)
     field(:storage_key, :string)
   end
 
-  def changeset(schema, params, supabase_url) do
+  @fields ~w[auto_refresh_token debug detect_session_in_url persist_session flow_type storage_key]a
+
+  @spec changeset(t, map) :: Ecto.Changeset.t()
+  def changeset(schema, params) do
     schema
-    |> cast(
-      params,
-      ~w[auto_refresh_token debug detect_session_in_url persist_session flow_type storage]a
-    )
-    |> validate_required(
-      ~w[auto_refresh_token debug detect_session_in_url persist_session flow_type]a
-    )
-    |> put_storage_key(supabase_url)
-  end
-
-  defp put_storage_key(%{valid?: false} = changeset, _), do: changeset
-
-  defp put_storage_key(changeset, url) do
-    host =
-      url
-      |> URI.new!()
-      |> Map.get(:host)
-      |> String.split(".")
-      |> List.first()
-
-    storage_key = String.replace(@storage_key_template, "$host", host)
-    put_change(changeset, :storage_key, storage_key)
+    |> cast(params, @fields)
+    |> validate_required(@fields -- [:storage_key])
   end
 end

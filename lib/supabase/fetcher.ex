@@ -1,367 +1,320 @@
 defmodule Supabase.Fetcher do
   @moduledoc """
-   A fundamental HTTP client for interfacing directly with Supabase services.
-
-  `Supabase.Fetcher` provides the groundwork for sending HTTP requests to the Supabase infrastructure. This includes utilities for various HTTP methods such as GET, POST, PUT, DELETE, and functions to simplify the process of streaming data or uploading files.
+  `Supabase.Fetcher` is a comprehensive HTTP client designed to interface seamlessly with Supabase services. This module acts as the backbone for making HTTP requests, streaming data, uploading files, and managing request/response lifecycles within the Supabase ecosystem.
 
   ## Key Features
 
-  - **Low-level HTTP Interactions**: This module allows for raw HTTP requests to any URL, simplifying interactions with web resources.
-  - **Data Streaming**: Efficiently stream large data payloads, such as downloading files.
-  - **Request Customization**: Extensive header customization and utility functions for constructing requests tailored to your requirements.
-  - **Response Parsing**: Automatically converts JSON responses into Elixir maps and handles various response scenarios.
+  - **Request Composition**: Build requests with method, headers, body, and query parameters using a composable builder pattern via `Supabase.Fetcher.Request`.
+  - **Streaming Support**: Stream large responses efficiently using `Finch.stream/5`, reducing memory usage for large payloads.
+  - **Error Management**: Centralized error handling through `Supabase.ErrorParser`, supporting structured and semantic error reporting.
 
-  ## Recommended Usage
+  ## Key Components
 
-  While `Supabase.Fetcher` is versatile and comprehensive, it operates at a very granular level. For most applications and needs, leveraging higher-level APIs that correspond to specific Supabase services is advisable:
+  ### HTTP Clients
 
-  - `Supabase.Storage` - API to interact directly with buckets and objects in Supabase Storage.
+  `Supabase.Fetcher` provides a `Supabase.Fetcher.Adapter` behaviour that defines
+  the interface to implement custom HTTP clients backends (e.g `Finch`, `Req`, `:httpc`).
 
-  ## Disclaimer
+  That way is possible to use the same API defined on `Supabase.Fetcher` and customize
+  how make the actual HTTP request. The default implementation uses `Supabase.Fetcher.Adapter.Finch`.
 
-  If your aim is to directly harness this module as a low-level HTTP client, due to missing features in other packages or a desire to craft a unique Supabase integration, you can certainly do so. However, always keep in mind that `Supabase.Storage` and other Supabase-oriented packages might offer better abstractions and ease-of-use.
+  You can customize the HTTP client used in `Supabase.Fetcher` with the `Supabase.Fetcher.Request.with_http_client/2` function while building your request:
 
-  Use `Supabase.Fetcher` with a clear understanding of its features and operations.
-  """
+  ```elixir
+  fetcher =
+    Supabase.Fetcher.Request.new(client)
+    |> Supabase.Fetcher.Request.with_http_client(Supabase.Fetcher.Adapter.Httpc)
+  ```
 
-  @behaviour Supabase.FetcherBehaviour
+  `supabase_potion` would ideally provide multiple client implementations but you can
+  safely extend to your own preference using the aforementioned behaviour, something like:
 
-  @spec version :: String.t()
-  def version do
-    {:ok, vsn} = :application.get_key(:supabase_potion, :vsn)
-    List.to_string(vsn)
+  ```elixir
+  defmodule MyHTTPClient do
+    @moduledoc "My custom HTTP client to be used as backend for `Supabase.Fetcher`"
+
+    @behaviour Supabase.Fetcher.Adapter
+
+    @impl true
+    def request(%Supabase.Fetcher.Request{}), do: # ...
+
+    @impl true
+    # optional, if the client support async requests
+    def request_async(%Supabase.Fetcher.Request{}), do: # ...
+
+    @impl true
+    # optional, if the client support response streaming
+    def stream(%Supabase.Fetcher.Request{}), do: # ...
+    def stream(%Supabase.Fetcher.Request{}, on_response), do: # ...
+
+    @impl true
+    # required to Storage upload to work
+    def upload(%Supabase.Fetcher.Request{}, file_path, options), do: # ...
   end
+  ```
 
-  @spec new_connection(atom, url, body, headers) :: Finch.Request.t()
-        when url: String.t() | URI.t(),
-             body: binary | nil | {:stream, Enumerable.t()},
-             headers: list(tuple)
-  def new_connection(method, url, body, headers) do
-    headers = merge_headers(headers, default_headers())
-    Finch.build(method, url, headers, body)
-  end
+  ### Decoders and Parsers
 
-  @spec default_headers :: list(tuple)
-  defp default_headers do
-    [
-      {"content-type", "application/json"},
-      {"accept", "application/json"},
-      {"x-client-info", "supabase-fetch-elixir/#{version()}"},
-      {"user-agent", "SupabasePotion/#{version()}"}
-    ]
-  end
+  - **Body Decoder**: Custom modules implementing the `Supabase.Fetcher.BodyDecoder` behaviour can decode response bodies into application-specific formats.
+  - **Error Parser**: Handle service-specific errors using `Supabase.Error` implementations, ensuring consistent error reporting across services.
 
-  @doc """
-  Makes a HTTP request to the desired URL, with default headers and
-  stream back the response. Good to stream large files downlaods.
+  ### Streaming
 
-  You can also pass custom `Finch` options directly to the underlying `Finch.stream/4` function.
-  Those options can be seen on the [Finch documentation](https://hexdocs.pm/finch/Finch.html#stream/5-options).
+  - `stream/1` and `stream/2` support fine-grained control over streamed responses, allowing consumers to process data incrementally while retaining access to status and headers.
 
-  ## Examples
+  ### Upload Support
 
-       iex> {status, stream} = Supabase.Fetcher.stream("https://example.com")
-       iex> file = File.stream!("path/to/file", [], 4096)
-       Stream.run Stream.into(stream, file)
-  """
-  @impl true
-  def stream(url, headers \\ [], opts \\ []) do
-    ref = make_ref()
-    task = spawn_stream_task(new_connection(:get, url, nil, headers), ref, opts)
-    status = receive(do: ({:chunk, {:status, status}, ^ref} -> status))
+  Effortlessly upload binary files using the `upload/2` function, which manages content type, headers, and streaming.
 
-    stream =
-      Stream.resource(fn -> {ref, task} end, &receive_stream(&1), fn {_ref, task} ->
-        Task.shutdown(task)
-      end)
+  ## Example Usage
 
-    case {status, stream} do
-      {200, stream} -> {:ok, stream}
-      {s, _} when s >= 400 -> {:error, :not_found}
-      {s, _} when s >= 500 -> {:error, :server_error}
+  ### Basic Request
+
+  ```elixir
+  {:ok, %Supabase.Fetcher.Response{} = response} =
+    Supabase.Fetcher.Request.new(client)
+    |> Supabase.Fetcher.Request.with_auth_url("/token")
+    |> Supabase.Fetcher.Request.with_method(:post)
+    |> Supabase.Fetcher.Request.with_body(%{username: "test", password: "test"})
+    |> Supabase.Fetcher.request()
+  ```
+
+  ## Streaming
+
+  ### Consume the whole stream
+
+  ```elixir
+  {:ok, %Supabase.Fetcher.Response{body: <<...>>}} =
+    Supabase.Fetcher.Request.new(client)
+    |> Supabase.Fetcher.Request.with_storage_url("/large-file")
+    |> Supabase.Fetcher.stream()
+  ```
+
+  ### Fine-grained control over body stream
+
+  ```elixir
+  on_response = fn {status, headers, body} ->
+    try do
+      file = File.stream!("output.txt", [:write, :utf8])
+
+      body
+      |> Stream.into(file)
+      |> Stream.run()
+
+      {:ok, %Supabase.Fetcher.Response{status: status, headers: headers}}
+    rescue
+      e in File.Error -> {:error, e.reason}
     end
   end
 
-  defp spawn_stream_task(%Finch.Request{} = req, ref, opts) do
-    me = self()
+  {:ok, %Supabase.Fetcher.Response{body: stream}} =
+    Supabase.Fetcher.Request.new(client)
+    |> Supabase.Fetcher.Request.with_storage_url("/large-file")
+    |> Supabase.Fetcher.stream(on_response)
+  ```
 
-    Task.async(fn ->
-      on_chunk = fn chunk, _acc -> send(me, {:chunk, chunk, ref}) end
-      Finch.stream(req, Supabase.Finch, nil, on_chunk, opts)
-      send(me, {:done, ref})
-    end)
-  end
+  ## Custom Decoders and Error Parsers
 
-  defp receive_stream({ref, _task} = payload) do
-    receive do
-      {:chunk, {:data, data}, ^ref} -> {[data], payload}
-      {:done, ^ref} -> {:halt, payload}
+  ```elixir
+  {:ok, %Supabase.Decoder{} = response} =
+    Supabase.Fetcher.Request.new(client)
+    |> Supabase.Fetcher.Request.with_functions_url("/execute")
+    |> Supabase.Fetcher.Request.with_body_decoder(MyCustomDecoder)
+    |> Supabase.Fetcher.Request.with_error_parser(MyErrorParser)
+    |> Supabase.Fetcher.request()
+  ```
+
+  ## Notes
+
+  This module is designed to be extensible and reusable for all Supabase-related services. It abstracts away the low-level HTTP intricacies while providing the flexibility developers need to interact with Supabase services in Elixir applications.
+
+  In general, if you don't have specific needs, custom application formats or you aren't
+  building something new around `Supabase.Fetcher` you generally are safe using the default options if you only need to consume Supabase services as a client.
+  """
+
+  alias Supabase.Error
+  alias Supabase.Fetcher.Request
+  alias Supabase.Fetcher.Response
+  alias Supabase.Fetcher.ResponseAdapter
+
+  @behaviour Supabase.Fetcher.Behaviour
+
+  @typedoc "Generic typespec to define possible response values, adapt to each client"
+  @type response :: Finch.Response.t()
+  @type status :: integer
+  @type headers :: list({header :: String.t(), value :: String.t()})
+  @type query :: list({param :: String.t(), value :: String.t()})
+  @type method :: :get | :post | :head | :patch | :put | :delete
+  @type body :: iodata | {:stream, Enumerable.t()} | nil
+  @type url :: String.t() | URI.t()
+
+  @doc """
+  Executes the current request builder, synchronously and returns the response.
+  """
+  @impl true
+  def request(%Request{http_client: http_client} = builder, opts \\ [])
+      when not is_nil(builder.url) do
+    with {:ok, resp} <- http_client.request(builder, opts) do
+      {:ok, ResponseAdapter.from(resp)}
     end
+    |> handle_response(builder)
+  rescue
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
   @doc """
-  Simple GET request that format the response to a map or retrieve
-  the error reason as `String.t()`.
+  Executes the current request builder, asynchronously and returns the response.
+  Note that this function does not **stream** the request, although it can use
+  a stream to consume chunks, as you can see an example in `Supabase.Fetcher.Adapter.Finch.request_async/2`.
 
-  ## Examples
+  What happens here is that the request is done on a separate process, and the response
+  is sent via message passing, in chunks, so no all HTTP client support async requests.
 
-       iex> Supabase.Fetcher.get("https://example.com")
-       {:ok, %{"key" => "value"}}
+  Also, this function provides a higher-level API to just trigger the request dispatch
+  and return a result, so the use experience looks like the sync version `request/2`.
+
+  If you wanna **stream** a HTTP request, then you should go with `stream/2` or `stream/3`.
+
+  And if you wanna **upload** a binary/file, streaming it, then you should go with `upload/3`.
   """
-  def get(url) do
-    get(url, nil, [], [])
-  end
-
-  def get(url, body) do
-    get(url, body, [], [])
-  end
-
-  def get(url, body, headers) do
-    get(url, body, headers, [])
-  end
-
   @impl true
-  def get(url, body, headers, opts) do
-    resp =
-      :get
-      |> new_connection(url, Jason.encode_to_iodata!(body), headers)
-      |> Finch.request(Supabase.Finch)
-
-    if opts[:resolve_json] do
-      format_response(resp)
-    else
-      resp
+  def request_async(%Request{http_client: http_client} = builder, opts \\ [])
+      when not is_nil(builder.url) do
+    with {:ok, resp} <- http_client.request_async(builder, opts) do
+      {:ok, ResponseAdapter.from(resp)}
     end
+    |> handle_response(builder)
+  rescue
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
   @doc """
-  Simple POST request that format the response to a map or retrieve
-  the error reason as `String.t()`.
+  Makes a HTTP request from the request builder and
+  stream back the response. Good to stream large files downloads, as it what
+  `Supabase.Storage` does.
 
-  ## Examples
+  The `Supabase.Fetcher.stream/2` consumes the whole response stream and returns, in case of success, `{:ok, %Supabase.Fetcher.Response{}}`, however you can have a more fine-grained control of the stream using `Supabase.Fetcher.stream/3`.
 
-       iex> Supabase.Fetcher.post("https://example.com", %{key: "value"})
-       {:ok, %{"key" => "value"}}
+  The `stream/2` behaviour look likes `request/2` and `request_async/2` since it feels
+  like a sync request where you dispatch and receive a parsed result.
+
+  For have more control of the response chunks, you can pass a 1 arity function, with that the response stream will be
+  **partially** consumed to get the response status and headers, but the body will
+  remain as a stream, then it will invoke the `on_response` function that you passed
+  with `{status, headers, stream}` as argument, then you should return `Supabase.Fetcher.Response` in case of success or `Supabase.Error` in case of error.
   """
   @impl true
-  def post(url, body \\ nil, headers \\ [], opts \\ []) do
-    headers = merge_headers(headers, [{"content-type", "application/json"}])
+  def stream(builder, on_response \\ nil, opts \\ [])
 
-    :post
-    |> new_connection(url, Jason.encode_to_iodata!(body), headers)
-    |> Finch.request(Supabase.Finch)
-    |> then(&if opts[:resolve_json], do: format_response(&1), else: &1)
-  end
-
-  @doc """
-  Simple PUT request that format the response to a map or retrieve
-  the error reason as `String.t()`.
-
-  ## Examples
-
-       iex> Supabase.Fetcher.put("https://example.com", %{key: "value"})
-       {:ok, %{"key" => "value"}}
-  """
-  @impl true
-  def put(url, body, headers \\ [], opts \\ []) do
-    headers = merge_headers(headers, [{"content-type", "application/json"}])
-
-    :put
-    |> new_connection(url, Jason.encode_to_iodata!(body), headers)
-    |> Finch.request(Supabase.Finch)
-    |> then(&if opts[:resolve_json], do: format_response(&1), else: &1)
-  end
-
-  @doc """
-  Simple HEAD request that format the response to a map or
-  retrieve the error as `String.t()`
-  """
-  @impl true
-  def head(url, body, headers \\ [], opts \\ []) do
-    headers = merge_headers(headers, [{"content-type", "application/json"}])
-
-    :head
-    |> new_connection(url, Jason.encode_to_iodata!(body), headers)
-    |> Finch.request(Supabase.Finch)
-    |> then(&if opts[:resolve_json], do: format_response(&1), else: &1)
-  end
-
-  @doc """
-  Simple PATCH request that format the response to a map or
-  retrieve the error as `String.t()`
-  """
-  @impl true
-  def patch(url, body, headers \\ [], opts \\ []) do
-    headers = merge_headers(headers, [{"content-type", "application/json"}])
-
-    :put
-    |> new_connection(url, Jason.encode_to_iodata!(body), headers)
-    |> Finch.request(Supabase.Finch)
-    |> then(&if opts[:resolve_json], do: format_response(&1), else: &1)
-  end
-
-  @doc """
-  Simple DELETE request that format the response to a map or retrieve
-  the error reason as `String.t()`.
-
-  ## Examples
-
-       iex> Supabase.Fetcher.delete("https://example.com", %{key: "value"})
-       {:ok, %{"key" => "value"}}
-
-       iex> Supabase.Fetcher.delete("https://example.com", %{key: "value"})
-       {:error, :not_found}
-  """
-  @impl true
-  def delete(url, body \\ nil, headers \\ [], opts \\ []) do
-    headers = merge_headers(headers, [{"content-type", "application/json"}])
-
-    :delete
-    |> new_connection(url, Jason.encode_to_iodata!(body), headers)
-    |> Finch.request(Supabase.Finch)
-    |> then(&if opts[:resolve_json], do: format_response(&1), else: &1)
-  end
-
-  @doc """
-  Upload a binary to the desired URL.
-
-  params:
-  - `method`: `:put` or `:post`
-  - `url`: the URL to upload the file
-  - `file`: the path to the file to upload
-  - `headers`: list of additional headers to append to the request
-
-  ## Examples
-
-       iex> Supabase.Fetcher.upload(:post, "https://example.com", "path/to/file")
-       {:ok, %{"key" => "value"}}
-  """
-  @impl true
-  def upload(method, url, file, headers \\ []) do
-    body_stream = File.stream!(file, 4096, encoding: :utf8)
-    %File.Stat{size: content_length} = File.stat!(file)
-    content_headers = [{"content-length", to_string(content_length)}]
-    headers = merge_headers(headers, content_headers)
-    conn = new_connection(method, url, {:stream, body_stream}, headers)
-
-    conn
-    |> Finch.request(Supabase.Finch)
-    |> format_response()
-  end
-
-  def get_full_url(base_url, path) do
-    URI.merge(base_url, path)
-  end
-
-  @doc """
-  Convenience function that given a `apikey` and a optional ` token`, it will return the headers
-  to be used in a request to your Supabase API.
-
-  ## Examples
-
-       iex> Supabase.Fetcher.apply_conn_headers("apikey-value")
-       [{"apikey", "apikey-value"}, {"authorization", "Bearer apikey-value"}]
-
-       iex> Supabase.Fetcher.apply_conn_headers("apikey-value", "token-value")
-       [{"apikey", "apikey-value"}, {"authorization", "Bearer token-value"}]
-  """
-
-  def apply_headers(api_key, token \\ nil, headers \\ []) do
-    conn_headers = [
-      {"apikey", api_key},
-      {"authorization", "Bearer #{token || api_key}"}
-    ]
-
-    merge_headers(conn_headers, headers)
-  end
-
-  defp merge_headers(some, other) do
-    some = if is_list(some), do: some, else: Map.to_list(some)
-    other = if is_list(other), do: other, else: Map.to_list(other)
-
-    some
-    |> Kernel.++(other)
-    |> Enum.uniq_by(fn {name, _} -> name end)
-    |> Enum.reject(fn {_, v} -> is_nil(v) end)
-  end
-
-  def apply_client_headers(%Supabase.Client{} = client, token \\ nil, headers \\ []) do
-    client.conn.api_key
-    |> apply_headers(token || client.conn.access_token, client.global.headers)
-    |> merge_headers(headers)
-  end
-
-  def get_header(%Finch.Response{headers: headers}, header) do
-    if h = Enum.find(headers, &(elem(&1, 0) == header)) do
-      elem(h, 1)
-    else
-      nil
+  def stream(%Request{http_client: http_client} = builder, nil, opts)
+      when not is_nil(builder.url) do
+    with {:ok, resp} <- http_client.stream(builder, opts) do
+      {:ok, ResponseAdapter.from(resp)}
     end
+    |> handle_response(builder)
+  rescue
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
-  def get_header(%Finch.Response{} = resp, header, default) do
-    get_header(resp, header) || default
-  end
-
-  def format_response({:error, %{reason: reason}}) do
-    {:error, reason}
-  end
-
-  def format_response({:ok, %{status: 404}}) do
-    {:error, :not_found}
-  end
-
-  def format_response({:ok, %{status: 401}}) do
-    {:error, :unauthorized}
-  end
-
-  def format_response({:ok, %{status: 204}}) do
-    {:ok, :no_body}
-  end
-
-  def format_response({:ok, %{status: s, body: body}}) when s in 200..300 do
-    Jason.decode(body)
-  end
-
-  def format_response({:ok, %{status: s, body: body}}) when s in 400..499 do
-    with {:ok, result} <- Jason.decode(body) do
-      {:error, format_bad_request_error(result)}
+  def stream(%Request{http_client: http_client} = builder, on_response, opts)
+      when not is_nil(builder.url) do
+    with {:ok, resp} <- http_client.stream(builder, on_response, opts) do
+      {:ok, ResponseAdapter.from(resp)}
     end
+    |> handle_response(builder)
+  rescue
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
-  def format_response({:ok, %{status: s}}) when s >= 500 do
-    {:error, :server_error}
-  end
-
-  defp format_bad_request_error(%{"message" => msg}) do
-    case msg do
-      "The resource was not found" -> :not_found
-      _ -> msg
+  @doc """
+  Upload a binary file based into the current request builder.
+  """
+  @impl true
+  def upload(%Request{http_client: http_client} = builder, file, opts \\ [])
+      when not is_nil(builder.url) do
+    with {:ok, resp} <- http_client.upload(builder, file, opts) do
+      {:ok, ResponseAdapter.from(resp)}
     end
+    |> handle_response(builder)
+  rescue
+    exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
 
-  defp format_bad_request_error(%{"code" => 429, "msg" => msg}) do
-    if String.starts_with?(msg, "For security purposes,") do
-      [seconds] = Regex.run(~r/\d+/, msg, return: :binary) || ["undefined"]
-      {:error, {:rate_limit_until_seconds, seconds}}
-    else
-      case msg do
-        "Email rate limit exceeded" -> :email_rate_limit
-        _ -> msg
+  @spec handle_response({:ok, response} | {:error, term}, context) :: Supabase.result(response)
+        when response: Response.t(),
+             context: Request.t()
+  defp handle_response({:ok, %Response{} = resp}, %Request{} = builder) do
+    decode_body? = builder.options[:decode_body?] || true
+    parse_http_err? = builder.options[:parse_http_error?] || true
+    http_error_parser = builder.error_parser
+    decoder = builder.body_decoder
+    decoder_opts = builder.body_decoder_opts
+
+    maybe_decode_body = fn ->
+      if decode_body? do
+        Response.decode_body(resp, decoder, decoder_opts)
+      else
+        resp
+      end
+    end
+
+    with {:ok, resp} <- maybe_decode_body.() do
+      if parse_http_err? and resp.status >= 400 do
+        {:error, http_error_parser.from(resp, builder)}
+      else
+        {:ok, resp}
       end
     end
   end
 
-  defp format_bad_request_error(%{"error" => err, "error_description" => desc}) do
-    case {err, desc} do
-      {"invalid_grant", nil} -> :invalid_grant
-      {"invalid_grant", "Invalid login credentials"} -> {:invalid_grant, :invalid_credentials}
-      {"invalid_grant", "Email not confirmed"} -> {:invalid_grant, :email_not_confirmed}
-      {"invalid_grant", err} -> {:invalid_grant, err}
-    end
+  defp handle_response({:error, %Error{} = err}, %Request{} = builder) do
+    metadata = Error.make_default_http_metadata(builder)
+    metadata = Map.merge(metadata, err.metadata)
+    {:error, %{err | metadata: metadata}}
   end
 
-  defp format_bad_request_error(err) do
-    err
+  defp handle_response({:error, err}, %Request{} = builder) do
+    metadata = Error.make_default_http_metadata(builder)
+
+    {:error,
+     Error.new(
+       code: :unexpected,
+       service: builder.service,
+       metadata: Map.put(metadata, :raw_error, err)
+     )}
+  end
+
+  defp handle_exception(exception, stacktrace, %Request{} = builder) do
+    entity = Map.get(exception, :__struct__)
+    message = entity.message(exception)
+    stacktrace = Exception.format_stacktrace(stacktrace)
+
+    {:error,
+     Supabase.Error.new(
+       code: :exception,
+       message: message,
+       service: builder.service,
+       metadata: %{stacktrace: stacktrace, exception: exception}
+     )}
+  end
+
+  @doc """
+  Merge two collections of headers as an `Enumberable.t()`, avoiding duplicates and removing nullable headers
+  - aka `nil` values.
+
+  Note that this function is **right-associative** in terms of header priority,
+  this means that any duplicate new header that is passed to this function
+  will **overwrite** the last definition, take caution with it.
+  """
+  @spec merge_headers(Enumerable.t(String.t()), Enumerable.t(String.t())) ::
+          Finch.Request.headers()
+  def merge_headers(some, other) do
+    some = if is_list(some), do: some, else: Map.to_list(some)
+    other = if is_list(other), do: other, else: Map.to_list(other)
+
+    other
+    |> Kernel.++(some)
+    |> Enum.reject(fn {_, v} -> is_nil(v) end)
+    |> Enum.uniq_by(fn {name, _} -> String.downcase(name) end)
   end
 end

@@ -36,6 +36,10 @@ result
 # Nix files
 result
 
+# LSP files
 .elixir_ls/
 .elixir-tools/
 .lexical/
+
+# Dialyzer
+/priv/plts/

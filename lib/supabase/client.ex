@@ -12,9 +12,9 @@ defmodule Supabase.Client do
       iex> Supabase.init_client(base_url, api_key, %{})
       {:ok, %Supabase.Client{}}
 
-  > That way of initialisation is useful when you want to manage the connection options yourself or create one off clients.
+  > That way of initialisation is useful when you want to manage the client state by yourself or create one off clients.
 
-  However, starting a client directly means you have to manage the connection options yourself. To make it easier, you can use the `Supabase.Client` module to manage the connection options for you.
+  However, starting a client directly means you have to manage the client state by yourself. To make it easier, you can use the `Supabase.Client` module to manage the connection options for you, which we call a "self managed client".
 
   To achieve this you can use the `Supabase.Client` module in your module:
 
@@ -22,16 +22,19 @@ defmodule Supabase.Client do
         use Supabase.Client, otp_app: :my_app
       end
 
-  This will automatically start an Agent process to manage the connection options for you. But for that to work, you need to configure your defined Supabase client in your `config.exs`:
+  This will automatically start an [Agent](https://hexdocs.pm/elixir/Agent.html) process to manage the state for you. But for that to work, you need to configure your Supabase client options in your application configuration, either in compile-time (`config.exs`) or runtime (`runtime.exs`):
+
+      # config/runtime.exs or config/config.exs
 
       config :my_app, MyApp.Supabase.Client,
         base_url: "https://<app-name>.supabase.co",
         api_key: "<supabase-api-key>",
-        conn: %{access_token: "<supabase-access-token>"}, # optional
-        db: %{schema: "another"}, # default to public
-        auth: %{debug: true} # optional
+        # any additional options
+        access_token: "<supabase-access-token>",
+        db: [schema: "another"],
+        auth: [debug: true] # optional
 
-  Another alternative would be to configure your Supabase Client at runtime, while starting your application:
+  Another alternative would be to configure your Supabase Client in code, while starting your application:
 
       defmodule MyApp.Application do
         use Application
@@ -49,16 +52,14 @@ defmodule Supabase.Client do
         end
       end
 
-  For more information on how to configure your Supabase Client with additional options, please refer to the [Supabase official documentation](https://supabase.com/docs/reference/javascript/initializing)
+  For more information on how to configure your Supabase Client with additional options, please refer to the `Supabase.Client.t()` typespec.
 
   ## Examples
 
       %Supabase.Client{
-        conn: %{
-          base_url: "https://<app-name>.supabase.io",
-          api_key: "<supabase-api-key>",
-          access_token: "<supabase-access-token>"
-        },
+        base_url: "https://<app-name>.supabase.io",
+        api_key: "<supabase-api-key>",
+        access_token: "<supabase-access-token>",
         db: %Supabase.Client.Db{
           schema: "public"
         },
@@ -71,16 +72,8 @@ defmodule Supabase.Client do
           detect_session_in_url: true,
           flow_type: :implicit,
           persist_session: true,
-          storage: nil,
           storage_key: "sb-<host>-auth-token"
         }
-      }
-
-      iex> Supabase.Client.retrieve_connection(%Supabase.Client{})
-      %Supabase.Client.Conn{
-        base_url: "https://<app-name>.supabase.io",
-        api_key: "<supabase-api-key>",
-        access_token: "<supabase-access-token>"
       }
   """
 
@@ -89,35 +82,52 @@ defmodule Supabase.Client do
   import Ecto.Changeset
 
   alias Supabase.Client.Auth
-  alias Supabase.Client.Conn
   alias Supabase.Client.Db
   alias Supabase.Client.Global
 
+  @typedoc """
+  The type of the `Supabase.Client` that will be returned from `Supabase.init_client/3`.
+
+  ## Source
+  https://supabase.com/docs/reference/javascript/initializing
+  """
   @type t :: %__MODULE__{
-          conn: Conn.t(),
+          base_url: String.t(),
+          access_token: String.t(),
+          api_key: String.t(),
+
+          # helper fields
+          realtime_url: String.t(),
+          auth_url: String.t(),
+          functions_url: String.t(),
+          database_url: String.t(),
+          storage_url: String.t(),
+
+          # "public" options
           db: Db.t(),
           global: Global.t(),
           auth: Auth.t()
         }
 
-  @type params :: %{
-          conn: Conn.params(),
-          db: Db.params(),
-          global: Global.params(),
-          auth: Auth.params()
+  @typedoc """
+  The type for the available additional options that can be passed
+  to `Supabase.init_client/3` to configure the Supabase client.
+
+  Note that these options can be passed to `Supabase.init_client/3` as `Enumerable`, which means it can be either a `Keyword.t()` or a `Map.t()`, but internally it will be passed as a map.
+  """
+  @type options :: %{
+          optional(:db) => Db.params(),
+          optional(:global) => Global.params(),
+          optional(:auth) => Auth.params()
         }
 
   defmacro __using__(otp_app: otp_app) do
+    module = __CALLER__.module
+
     quote do
       use Agent
 
-      import Supabase.Client, only: [
-        update_access_token: 2,
-        retrieve_connection: 1,
-        retrieve_base_url: 1,
-        retrieve_auth_url: 2,
-        retrieve_storage_url: 2
-      ]
+      import Supabase.Client, only: [update_access_token: 2]
 
       alias Supabase.MissingSupabaseConfig
 
@@ -138,18 +148,19 @@ defmodule Supabase.Client do
 
       Note that you need to configure it with your Supabase project details. You can do this by setting the `base_url` and `api_key` in your `config.exs` file:
 
-          config :#{@otp_app}, MyApp.Supabase.Client,
+          config :#{@otp_app}, #{inspect(unquote(module))},
             base_url: "https://<app-name>.supabase.co",
             api_key: "<supabase-api-key>",
-            conn: %{access_token: "<supabase-access-token>"}, # optional
-            db: %{schema: "another"}, # default to public
-            auth: %{debug: true} # optional
+            # additional options
+            access_token: "<supabase-access-token>",
+            db: [schema: "another"],
+            auth: [debug: true]
 
       Then, on your `application.ex` file, you can start the agent process by adding your defined client into the Supervision tree of your project:
 
           def start(_type, _args) do
             children = [
-              MyApp.Supabase.Client
+              #{inspect(unquote(module))}
             ]
 
             Supervisor.init(children, strategy: :one_for_one)
@@ -199,9 +210,12 @@ defmodule Supabase.Client do
         name = Keyword.get(opts, :name, __MODULE__)
         params = Map.new(opts)
 
-        Agent.start_link(fn ->
-          Supabase.init_client!(base_url, api_key, params)
-        end, name: name)
+        Agent.start_link(
+          fn ->
+            Supabase.init_client!(base_url, api_key, params)
+          end,
+          name: name
+        )
       end
 
       @doc """
@@ -220,128 +234,69 @@ defmodule Supabase.Client do
           client -> {:ok, client}
         end
       end
+
+      @doc """
+      This function updates the `access_token` field of client
+      that will then be used by the integrations as the `Authorization`
+      header in requests, by default the `access_token` have the same
+      value as the `api_key`.
+      """
+      @impl Supabase.Client.Behaviour
+      def set_auth(pid \\ __MODULE__, token) when is_binary(token) do
+        Agent.update(pid, &update_access_token(&1, token))
+      end
     end
   end
 
   @primary_key false
   embedded_schema do
-    embeds_one(:conn, Conn)
-    embeds_one(:db, Db)
-    embeds_one(:global, Global)
-    embeds_one(:auth, Auth)
+    field(:api_key, :string)
+    field(:access_token, :string)
+    field(:base_url, :string)
+
+    field(:realtime_url, :string)
+    field(:auth_url, :string)
+    field(:storage_url, :string)
+    field(:functions_url, :string)
+    field(:database_url, :string)
+
+    embeds_one(:db, Db, defaults_to_struct: true, on_replace: :update)
+    embeds_one(:global, Global, defaults_to_struct: true, on_replace: :update)
+    embeds_one(:auth, Auth, defaults_to_struct: true, on_replace: :update)
   end
 
-  @spec parse(params) :: {:ok, t} | {:error, Ecto.Changeset.t()}
-  def parse(attrs) do
+  @spec changeset(attrs :: map) :: Ecto.Changeset.t()
+  def changeset(%{base_url: base_url, api_key: api_key} = attrs) do
     %__MODULE__{}
-    |> cast(attrs, [])
-    |> cast_embed(:conn, required: true)
+    |> cast(attrs, [:api_key, :base_url, :access_token])
+    |> put_change(:access_token, attrs[:access_token] || api_key)
     |> cast_embed(:db, required: false)
     |> cast_embed(:global, required: false)
     |> cast_embed(:auth, required: false)
-    |> maybe_put_assocs()
-    |> validate_required([:conn])
-    |> apply_action(:parse)
+    |> validate_required([:access_token, :base_url, :api_key])
+    |> put_change(:auth_url, Path.join(base_url, "auth/v1"))
+    |> put_change(:functions_url, Path.join(base_url, "functions/v1"))
+    |> put_change(:database_url, Path.join(base_url, "rest/v1"))
+    |> put_change(:storage_url, Path.join(base_url, "storage/v1"))
+    |> put_change(:realtime_url, Path.join(base_url, "realtime/v1"))
   end
 
-  @spec parse!(params) :: Supabase.Client.t()
-  def parse!(attrs) do
-    case parse(attrs) do
-      {:ok, changeset} ->
-        changeset
+  @doc """
+  Helper function to swap the current acccess token being used in
+  the Supabase client instance.
 
-      {:error, changeset} ->
-        raise Ecto.InvalidChangesetError, changeset: changeset, action: :parse
-    end
-  end
+  Note that this functions shoudln't be used directly if you are using a
+  self managed client (aka started it into your supervision tree as the `Supabase.Client` moduledoc says), since it will return the updated client but it **won't**
+  update the inner client in the `Agent` process.
 
-  defp maybe_put_assocs(%{valid?: false} = changeset), do: changeset
+  To update the access token for a self managed client, you can use the `set_auth/2` function that is generated when you configure your client module.
 
-  defp maybe_put_assocs(changeset) do
-    auth = get_change(changeset, :auth)
-    db = get_change(changeset, :db)
-    global = get_change(changeset, :global)
-
-    changeset
-    |> maybe_put_assoc(:auth, auth, %Auth{})
-    |> maybe_put_assoc(:db, db, %Db{})
-    |> maybe_put_assoc(:global, global, %Global{})
-  end
-
-  defp maybe_put_assoc(changeset, key, nil, default),
-    do: put_change(changeset, key, default)
-
-  defp maybe_put_assoc(changeset, _key, _assoc, _default), do: changeset
-
+  If you're managing your own Supabase client state (aka one off clients) you can
+  use this helper function.
+  """
   @spec update_access_token(t, String.t()) :: t
   def update_access_token(%__MODULE__{} = client, access_token) do
-    path = [Access.key(:conn), Access.key(:access_token)]
-    put_in(client, path, access_token)
-  end
-
-  @doc """
-  Given a `Supabase.Client`, return the connection informations.
-
-  ## Examples
-
-      iex> Supabase.Client.retrieve_connection(%Supabase.Client{})
-      %Supabase.Client.Conn{}
-  """
-  @spec retrieve_connection(t) :: Conn.t()
-  def retrieve_connection(%__MODULE__{conn: conn}), do: conn
-
-  @doc """
-  Given a `Supabase.Client`, return the raw the base url for the Supabase project.
-
-  ## Examples
-
-      iex> Supabase.Client.retrieve_base_url(%Supabase.Client{})
-      "https://<app-name>.supabase.co"
-  """
-  @spec retrieve_base_url(t) :: String.t()
-  def retrieve_base_url(%__MODULE__{conn: conn}) do
-    conn.base_url
-  end
-
-  @spec retrieve_url(t, String.t()) :: URI.t()
-  defp retrieve_url(%__MODULE__{} = client, uri) do
-    client
-    |> retrieve_base_url()
-    |> URI.merge(uri)
-  end
-
-  @doc """
-  Given a `Supabase.Client`, mounts the base url for the Auth/GoTrue feature.
-
-  ## Examples
-
-      iex> Supabase.Client.retrieve_auth_url(%Supabase.Client{})
-      "https://<app-name>.supabase.co/auth/v1"
-  """
-  @spec retrieve_auth_url(t, String.t()) :: String.t()
-  def retrieve_auth_url(%__MODULE__{auth: auth} = client, uri \\ "/") do
-    client
-    |> retrieve_url(auth.uri)
-    |> URI.append_path(uri)
-    |> URI.to_string()
-  end
-
-  @storage_endpoint "/storage/v1"
-
-  @doc """
-  Given a `Supabase.Client`, mounts the base url for the Storage feature.
-
-  ## Examples
-
-      iex> Supabase.Client.retrieve_storage_url(%Supabase.Client{})
-      "https://<app-name>.supabase.co/storage/v1"
-  """
-  @spec retrieve_storage_url(t, String.t()) :: String.t()
-  def retrieve_storage_url(%__MODULE__{} = client, uri \\ "/") do
-    client
-    |> retrieve_url(@storage_endpoint)
-    |> URI.append_path(uri)
-    |> URI.to_string()
+    %{client | access_token: access_token}
   end
 
   defimpl Inspect, for: Supabase.Client do
@@ -354,7 +309,7 @@ defmodule Supabase.Client do
           concat([
             line(),
             "base_url: ",
-            to_doc(client.conn.base_url, opts),
+            to_doc(client.base_url, opts),
             ",",
             line(),
             "schema: ",
