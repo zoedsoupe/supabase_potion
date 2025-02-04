@@ -218,10 +218,7 @@ defmodule Supabase.Fetcher do
 
   def stream(%Request{http_client: http_client} = builder, on_response, opts)
       when not is_nil(builder.url) do
-    with {:ok, resp} <- http_client.stream(builder, on_response, opts) do
-      {:ok, ResponseAdapter.from(resp)}
-    end
-    |> handle_response(builder)
+    http_client.stream(builder, on_response, opts)
   rescue
     exception -> handle_exception(exception, __STACKTRACE__, builder)
   end
