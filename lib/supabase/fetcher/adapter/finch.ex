@@ -89,7 +89,12 @@ defmodule Supabase.Fetcher.Adapter.Finch do
       end
 
     if is_function(on_response, 1) do
-      on_response.({status, headers, stream})
+      case on_response.({status, headers, stream}) do
+        :ok -> :ok
+        {:ok, body} -> {:ok, body}
+        {:error, %Supabase.Error{} = err} -> {:error, err}
+        unexpected -> Supabase.Error.new(service: b.service, metadata: %{raw_error: unexpected})
+      end
     else
       %Finch.Response{
         status: status,

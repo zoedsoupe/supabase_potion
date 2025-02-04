@@ -60,6 +60,29 @@ defmodule Supabase.Fetcher.Adapter.FinchTest do
   describe "dealing with streams" do
     test "streams a response successfully", %{builder: builder} do
       @mock
+      |> expect(:stream, fn %Request{}, _opts ->
+        status = 200
+        headers = [{"content-length", 80_543}]
+        stream = Stream.cycle(["chunk1", "chunk2"])
+        body = Enum.take(stream, 2) |> Enum.to_list() |> Enum.join(",")
+        {:ok, %Finch.Response{status: status, headers: headers, body: body}}
+      end)
+
+      builder =
+        Request.with_body_decoder(builder, fn %{body: body}, _opts ->
+          {:ok, String.split(body, ",", trim: true)}
+        end)
+
+      assert {:ok, %Response{} = resp} = Fetcher.stream(builder)
+      assert resp.status == 200
+      assert Response.get_header(resp, "content-length") == 80_543
+      assert resp.body == ["chunk1", "chunk2"]
+    end
+
+    test "streams a response successfully with custom on_response handler with no body", %{
+      builder: builder
+    } do
+      @mock
       |> expect(:stream, fn %Request{}, on_response, _opts ->
         status = 200
         headers = [{"content-length", 80_543}]
@@ -68,22 +91,62 @@ defmodule Supabase.Fetcher.Adapter.FinchTest do
       end)
 
       on_response = fn {status, headers, body} ->
-        body = Enum.take(body, 2) |> Enum.to_list() |> Enum.join(",")
+        assert status == 200
+        assert List.keyfind(headers, "content-length", 0) == {"content-length", 80_543}
 
-        {:ok,
-         [status: status, headers: headers, body: body]
-         |> then(&struct(Finch.Response, &1))}
+        # very expensing body consuming
+        _ = Enum.take(body, 2) |> Enum.to_list()
+
+        :ok
       end
 
-      builder =
-        Request.with_body_decoder(builder, fn %{body: body}, _opts ->
-          {:ok, String.split(body, ",", trim: true)}
-        end)
+      assert :ok = Fetcher.stream(builder, on_response)
+    end
 
-      assert {:ok, %Response{} = resp} = Fetcher.stream(builder, on_response)
-      assert resp.status == 200
-      assert Response.get_header(resp, "content-length") == 80_543
-      assert resp.body == ["chunk1", "chunk2"]
+    test "streams a response successfully with custom on_response handler returning body", %{
+      builder: builder
+    } do
+      @mock
+      |> expect(:stream, fn %Request{}, on_response, _opts ->
+        status = 200
+        headers = [{"content-length", 80_543}]
+        stream = Stream.cycle(["chunk1", "chunk2"])
+        on_response.({status, headers, stream})
+      end)
+
+      on_response = fn {status, headers, body} ->
+        assert status == 200
+        assert List.keyfind(headers, "content-length", 0) == {"content-length", 80_543}
+
+        {:ok,
+         body
+         |> Enum.take(2)
+         |> Enum.to_list()}
+      end
+
+      assert {:ok, body} = Fetcher.stream(builder, on_response)
+      assert body == ["chunk1", "chunk2"]
+    end
+
+    test "returns an error from response streaming with custom on_response handler", %{
+      builder: builder
+    } do
+      @mock
+      |> expect(:stream, fn %Request{}, on_response, _opts ->
+        status = 404
+        headers = [{"content-length", 80_543}]
+        stream = Stream.cycle([])
+        on_response.({status, headers, stream})
+      end)
+
+      on_response = fn {status, headers, _body} ->
+        assert status == 404
+        assert List.keyfind(headers, "content-length", 0) == {"content-length", 80_543}
+
+        {:error, Error.new(code: :not_found, metadata: %{status: status})}
+      end
+
+      assert {:error, %Error{}} = Fetcher.stream(builder, on_response)
     end
   end
 
