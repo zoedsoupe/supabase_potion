@@ -242,7 +242,7 @@ enabled = false
 # user_pool_region = "us-east-1"
 
 [edge_runtime]
-enabled = false
+enabled = true
 # Configure one of the supported request policies: `oneshot`, `per_worker`.
 # Use `oneshot` for hot reload, or `per_worker` for load testing.
 policy = "oneshot"
@@ -257,6 +257,36 @@ inspector_port = 8083
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 # entrypoint = "./functions/MY_FUNCTION_NAME/index.ts"
+
+[functions.binary-data]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/binary-data/index.ts"
+
+[functions.error-cases]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/error-cases/index.ts"
+
+[functions.headers-demo]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/headers-demo/index.ts"
+
+[functions.json-echo]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/json-echo/index.ts"
+
+[functions.simple-text]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/simple-text/index.ts"
+
+[functions.stream-data]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/stream-data/index.ts"
 
 [analytics]
 enabled = false
