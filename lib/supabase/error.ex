@@ -109,7 +109,7 @@ end
 
 defmodule Supabase.HTTPErrorParser do
   @moduledoc """
-  The default error parser in case no one is provided via `Supabase.Fetcher.with_error_parser/2`.
+  The default error parser in case no one is provided via `Supabase.Fetcher.Request.with_error_parser/2`.
 
   Error parsers should be implement firstly by adjacent services libraries, to
   handle service-specific error like for authentication or storage, although
